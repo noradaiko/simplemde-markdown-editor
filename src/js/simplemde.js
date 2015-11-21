@@ -361,6 +361,7 @@ function toggleSideBySide(editor) {
 	cm.on("update", function() {
 		preview.innerHTML = editor.options.previewRender(editor.value(), preview);
 	});
+	cm.refresh();
 }
 
 
