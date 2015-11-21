@@ -1,5 +1,4 @@
 .CodeMirror {
-	height: auto;
 	min-height: 300px;
 	border: 1px solid #ddd;
 	border-bottom-left-radius: 4px;
@@ -10,7 +9,7 @@
 }
 
 .CodeMirror-scroll {
-	min-height: 300px
+	min-height: 270px
 }
 
 .CodeMirror-fullscreen {

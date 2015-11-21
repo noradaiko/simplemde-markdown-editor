@@ -321,7 +321,7 @@ function toggleSideBySide(editor) {
 	var cm = editor.codemirror;
 	var wrapper = cm.getWrapperElement();
 	var preview = wrapper.nextSibling;
-	var toolbarButton = editor.toolbarElements["side-by-side"];
+	var toolbarButton = editor.toolbarElements["side-by-side"] || {};
 
 	if(/editor-preview-active-side/.test(preview.className)) {
 		preview.className = preview.className.replace(
@@ -334,8 +334,8 @@ function toggleSideBySide(editor) {
 		// give some time for the transition from editor.css to fire and the view to slide from right to left,
 		// instead of just appearing.
 		setTimeout(function() {
-			if(!cm.getOption("fullScreen"))
-				toggleFullScreen(editor);
+			//if(!cm.getOption("fullScreen"))
+			//	toggleFullScreen(editor);
 			preview.className += " editor-preview-active-side";
 		}, 1);
 		toolbarButton.className += " active";
@@ -967,7 +967,7 @@ SimpleMDE.prototype.render = function(el) {
 	this.codemirror = CodeMirror.fromTextArea(el, {
 		mode: mode,
 		backdrop: backdrop,
-		theme: "paper",
+		theme: "solarized-dark",
 		tabSize: (options.tabSize != undefined) ? options.tabSize : 2,
 		indentUnit: (options.tabSize != undefined) ? options.tabSize : 2,
 		indentWithTabs: (options.indentWithTabs === false) ? false : true,
