@@ -1393,12 +1393,12 @@ SimpleMDE.prototype.isFullscreenActive = function() {
 	return cm.getOption("fullScreen");
 };
 
-SimpleMDE.prototype.updatePreview = _.throttle(function() {
+SimpleMDE.prototype.updatePreview = function() {
 	var cm = this.codemirror;
 	var wrapper = cm.getWrapperElement();
 	var preview = wrapper.nextSibling;
 
 	preview.innerHTML = this.options.previewRender(this.value(), preview);
-}, 1000);
+};
 
 module.exports = SimpleMDE;
