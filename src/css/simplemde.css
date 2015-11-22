@@ -239,11 +239,12 @@
 }
 
 .editor-preview-active-side {
-	display: block
+	display: block;
 }
 
 .editor-preview-active {
-	display: block
+	display: block;
+	width: 100%;
 }
 
 .editor-preview>p,
@@ -263,6 +264,10 @@
 .editor-preview-side table th {
 	border: 1px solid #ddd;
 	padding: 5px;
+}
+
+.CodeMirror.hidden-for-preview {
+	display: none;
 }
 
 .CodeMirror .CodeMirror-code .cm-tag {
