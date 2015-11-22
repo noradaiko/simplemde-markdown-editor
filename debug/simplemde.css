@@ -571,7 +571,6 @@ span.CodeMirror-selectedtext { background: none; }
 	width: 50%;
 	top: 50px;
 	right: 0;
-	background: #fafafa;
 	z-index: 9999;
 	overflow: auto;
 	display: none;
@@ -666,6 +665,39 @@ span.CodeMirror-selectedtext { background: none; }
 .CodeMirror .CodeMirror-code .cm-strikethrough {
 	text-decoration: line-through;
 }
+.CodeMirror-dialog {
+  position: absolute;
+  left: 0; right: 0;
+  background: inherit;
+  z-index: 15;
+  padding: .1em .8em;
+  overflow: hidden;
+  color: inherit;
+}
+
+.CodeMirror-dialog-top {
+  border-bottom: 1px solid #eee;
+  top: 0;
+}
+
+.CodeMirror-dialog-bottom {
+  border-top: 1px solid #eee;
+  bottom: 0;
+}
+
+.CodeMirror-dialog input {
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 20em;
+  color: inherit;
+  font-family: monospace;
+}
+
+.CodeMirror-dialog button {
+  font-size: 70%;
+}
+
 .CodeMirror .cm-spell-error:not(.cm-url):not(.cm-comment):not(.cm-tag):not(.cm-word) {
 	 background: rgba(255, 0, 0, .15);
 }

@@ -4,6 +4,10 @@ var CodeMirror = require("codemirror");
 require("codemirror/addon/edit/continuelist.js");
 require("./codemirror/tablist");
 require("codemirror/addon/display/fullscreen.js");
+require("codemirror/addon/display/placeholder.js");
+require("codemirror/addon/search/search.js");
+require("codemirror/addon/search/searchcursor.js");
+require("codemirror/addon/dialog/dialog.js");
 require("codemirror/mode/markdown/markdown.js");
 require("codemirror/addon/mode/overlay.js");
 require("codemirror/mode/gfm/gfm.js");
@@ -1029,6 +1033,7 @@ SimpleMDE.prototype.render = function(el) {
 	this.codemirror = CodeMirror.fromTextArea(el, {
 		mode: mode,
 		backdrop: backdrop,
+		placeholder: options.placeholder || "",
 		theme: options.theme || "solarized-dark",
 		tabSize: (options.tabSize != undefined) ? options.tabSize : 2,
 		indentUnit: (options.tabSize != undefined) ? options.tabSize : 2,

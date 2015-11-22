@@ -75,6 +75,7 @@ gulp.task("styles", ["prettify-css"], function() {
 	var css_files = [
 		"./node_modules/codemirror/lib/codemirror.css",
 		"./src/css/*.css",
+		"./node_modules/codemirror/addon/dialog/dialog.css",
 		"./node_modules/codemirror-spell-checker/src/css/spell-checker.css"
 	];
 	
