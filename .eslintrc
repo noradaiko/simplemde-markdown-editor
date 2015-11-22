@@ -2,7 +2,7 @@
   "rules": {
     "indent": [
       2,
-      "tab"
+      2
     ],
     "strict": 0,
     "no-console": 0,
