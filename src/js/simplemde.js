@@ -372,8 +372,10 @@ function enableSideBySide(editor) {
 			preview.innerHTML = editor.options.previewRender(editor.value(), preview);
 		}, 1000);
 		cm.on("update", editor._updatePreview);
-		cm.refresh();
-		cm = null;
+		_.defer(function() {
+			cm.refresh();
+			cm = null;
+		});
 
 	});
 }
@@ -419,7 +421,7 @@ function isPreviewShown(editor) {
 function showPreview(editor) {
 	var cm = editor.codemirror;
 	var wrapper = cm.getWrapperElement();
-	var toolbar_div = wrapper.previousSibling;
+	var toolbar_div = editor.container.previousSibling;
 	var toolbar = editor.toolbarElements.preview;
 	var preview = wrapper.nextSibling;
 
@@ -449,7 +451,7 @@ function showPreview(editor) {
 function hidePreview(editor) {
 	var cm = editor.codemirror;
 	var wrapper = cm.getWrapperElement();
-	var toolbar_div = wrapper.previousSibling;
+	var toolbar_div = editor.container.previousSibling;
 	var toolbar = editor.toolbarElements.preview;
 	var preview = wrapper.nextSibling;
 
@@ -1042,8 +1044,15 @@ SimpleMDE.prototype.render = function(el) {
 		autofocus: (options.autofocus === true) ? true : false,
 		extraKeys: keyMaps,
 		lineWrapping: (options.lineWrapping === false) ? false : true,
-		allowDropFileTypes: ["text/plain"]
+		allowDropFileTypes: ["text/plain"],
+		viewportMargin: 10
 	});
+
+	var container = document.createElement("div");
+	container.className = "editor-container";
+	container.appendChild(this.codemirror.getWrapperElement());
+	el.parentNode.insertBefore(container, el.nextSibling);
+	this.container = container;
 
 	if(options.toolbar !== false) {
 		this.createToolbar();
@@ -1226,8 +1235,7 @@ SimpleMDE.prototype.createToolbar = function(items) {
 		}
 	});
 
-	var cmWrapper = cm.getWrapperElement();
-	cmWrapper.parentNode.insertBefore(bar, cmWrapper);
+	this.element.parentNode.insertBefore(bar, this.container);
 	return bar;
 };
 
