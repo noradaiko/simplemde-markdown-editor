@@ -10,11 +10,18 @@ require("codemirror/addon/search/searchcursor.js");
 require("codemirror/addon/dialog/dialog.js");
 require("codemirror/mode/markdown/markdown.js");
 require("codemirror/addon/mode/overlay.js");
+require("./codemirror/modes.js");
+/*
 require("codemirror/mode/gfm/gfm.js");
 require("codemirror/mode/javascript/javascript.js");
 require("codemirror/mode/css/css.js");
 require("codemirror/mode/htmlmixed/htmlmixed.js");
 require("codemirror/mode/xml/xml.js");
+require("codemirror/mode/clike/clike.js");
+require("codemirror/mode/swift/swift.js");
+require("codemirror/mode/sql/sql.js");
+//require("codemirror/mode/meta.js");
+*/
 require("spell-checker");
 var marked = require("marked");
 var hljs = require("highlight.js");
@@ -963,7 +970,11 @@ SimpleMDE.prototype.markdown = function(text) {
 		if(this.options && this.options.renderingConfig && this.options.renderingConfig.codeSyntaxHighlighting === true && hljs) {
 			markedOptions.highlight = function(code, lang) {
 				if(lang) {
-					return hljs.highlight(lang, code).value;
+					try {
+						return hljs.highlight(lang, code).value;
+					} catch(e) {
+						return hljs.highlightAuto(code).value;
+					}
 				} else {
 					return hljs.highlightAuto(code).value;
 				}
