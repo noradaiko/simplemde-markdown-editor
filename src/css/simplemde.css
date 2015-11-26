@@ -12,6 +12,7 @@
 	border-bottom-left-radius: 0px;
 	border-bottom-right-radius: 0px;
 	flex: 1;
+	box-shadow: none !important;
 }
 
 .CodeMirror-scroll {
@@ -279,20 +280,6 @@
 	display: none;
 }
 
-
-/*
-.CodeMirror .CodeMirror-code .cm-tag {
-	color: #63a35c;
-}
-
-.CodeMirror .CodeMirror-code .cm-attribute {
-	color: #795da3;
-}
-
-.CodeMirror .CodeMirror-code .cm-string {
-	color: #183691;
-}
-
 .CodeMirror .CodeMirror-selected {
 	background: #d9d9d9;
 }
@@ -315,6 +302,20 @@
 .CodeMirror .CodeMirror-code .cm-header-4 {
 	font-size: 110%;
 	line-height: 110%;
+}
+
+
+/*
+.CodeMirror .CodeMirror-code .cm-tag {
+	color: #63a35c;
+}
+
+.CodeMirror .CodeMirror-code .cm-attribute {
+	color: #795da3;
+}
+
+.CodeMirror .CodeMirror-code .cm-string {
+	color: #183691;
 }
 
 .CodeMirror .CodeMirror-code .cm-comment {
