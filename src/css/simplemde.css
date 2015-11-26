@@ -279,6 +279,8 @@
 	display: none;
 }
 
+
+/*
 .CodeMirror .CodeMirror-code .cm-tag {
 	color: #63a35c;
 }
@@ -315,13 +317,10 @@
 	line-height: 110%;
 }
 
-
-/*
 .CodeMirror .CodeMirror-code .cm-comment {
 	background: rgba(0, 0, 0, .05);
 	border-radius: 2px;
 }
-*/
 
 .CodeMirror .CodeMirror-code .cm-link {
 	color: #7f8c8d;
@@ -334,3 +333,5 @@
 .CodeMirror .CodeMirror-code .cm-strikethrough {
 	text-decoration: line-through;
 }
+
+*/

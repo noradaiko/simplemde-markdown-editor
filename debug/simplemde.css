@@ -620,6 +620,8 @@ span.CodeMirror-selectedtext { background: none; }
 	display: none;
 }
 
+
+/*
 .CodeMirror .CodeMirror-code .cm-tag {
 	color: #63a35c;
 }
@@ -656,13 +658,10 @@ span.CodeMirror-selectedtext { background: none; }
 	line-height: 110%;
 }
 
-
-/*
 .CodeMirror .CodeMirror-code .cm-comment {
 	background: rgba(0, 0, 0, .05);
 	border-radius: 2px;
 }
-*/
 
 .CodeMirror .CodeMirror-code .cm-link {
 	color: #7f8c8d;
@@ -675,6 +674,8 @@ span.CodeMirror-selectedtext { background: none; }
 .CodeMirror .CodeMirror-code .cm-strikethrough {
 	text-decoration: line-through;
 }
+
+*/
 .CodeMirror-dialog {
   position: absolute;
   left: 0; right: 0;
