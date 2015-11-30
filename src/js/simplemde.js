@@ -991,6 +991,11 @@ SimpleMDE.prototype.markdown = function(text) {
 	}
 };
 
+SimpleMDE.prototype.destroy = function() {
+	this.container.parentNode.removeChild(this.container);
+	this.toolbarContainer.parentNode.removeChild(this.toolbarContainer);
+};
+
 /**
  * Render editor to the given element.
  */
@@ -1066,7 +1071,7 @@ SimpleMDE.prototype.render = function(el) {
 	this.container = container;
 
 	if(options.toolbar !== false) {
-		this.createToolbar();
+		this.toolbarContainer = this.createToolbar();
 	}
 	if(options.status !== false) {
 		this.createStatusbar();
