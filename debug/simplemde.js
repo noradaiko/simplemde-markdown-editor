@@ -22570,9 +22570,13 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
     header: "header",
     code: "comment",
     quote: "quote",
+    /*
     list1: "variable-2",
     list2: "variable-3",
-    list3: "keyword",
+    list3: "keyword",*/
+    list1: "variable-2",
+    list2: "variable-2",
+    list3: "variable-2",
     hr: "hr",
     image: "tag",
     formatting: "formatting",
@@ -55967,6 +55971,7 @@ SimpleMDE.prototype.render = function(el) {
 	} else {
 		mode = options.parsingConfig;
 		mode.name = "gfm";
+		mode.highlightFormatting = true;
 		mode.gitHubSpice = false;
 	}
 

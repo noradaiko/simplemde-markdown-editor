@@ -1045,6 +1045,7 @@ SimpleMDE.prototype.render = function(el) {
 	} else {
 		mode = options.parsingConfig;
 		mode.name = "gfm";
+		mode.highlightFormatting = true;
 		mode.gitHubSpice = false;
 	}
 
