@@ -950,14 +950,13 @@ function SimpleMDE(options) {
 	this.md = md({
 		linkify: true,
 		breaks: options.renderingConfig && options.renderingConfig.singleLineBreaks,
-		highlight: function (code, lang) {
+		highlight: function(code, lang) {
 			try {
-				if (lang && hljs.getLanguage(lang)) {
+				if(lang && hljs.getLanguage(lang)) {
 					return hljs.highlight(lang, code).value;
 				}
 				return hljs.highlightAuto(code).value;
-			}
-			catch (__) {
+			} catch(__) {
 				return ""; // use external default escaping
 			}
 		}
