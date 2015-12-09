@@ -1063,7 +1063,7 @@ SimpleMDE.prototype.render = function(el) {
 		lineWrapping: (options.lineWrapping === false) ? false : true,
 		allowDropFileTypes: ["text/plain"],
 		viewportMargin: 10,
-    matchBrackets: true
+		matchBrackets: true
 	});
 
 	var container = document.createElement("div");

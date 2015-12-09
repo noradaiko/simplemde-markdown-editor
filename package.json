@@ -41,6 +41,7 @@
     "gulp-minify-css": "^1.2.1",
     "gulp-rename": "^1.2.2",
     "gulp-uglify": "*",
+    "gulp-watch": "^4.3.5",
     "vinyl-source-stream": "^1.1.0"
   },
   "browserify": {
