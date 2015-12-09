@@ -23,10 +23,9 @@ require("codemirror/mode/sql/sql.js");
 //require("codemirror/mode/meta.js");
 */
 require("spell-checker");
-var marked = require("marked");
 var hljs = require("highlight.js");
 var _ = require("underscore");
-
+var md = require("markdown-it");
 
 // Some variables
 var isMac = /Mac/.test(navigator.platform);
@@ -946,6 +945,21 @@ function SimpleMDE(options) {
 	if(options.initialValue) {
 		this.value(options.initialValue);
 	}
+
+	// Initialize markdown-it
+	this.md = md({
+		breaks: options.renderingConfig && options.renderingConfig.singleLineBreaks,
+		highlight: function(code, lang) {
+			try {
+				if(lang && hljs.getLanguage(lang)) {
+					return hljs.highlight(lang, code).value;
+				}
+				return hljs.highlightAuto(code).value;
+			} catch(__) {
+				return ""; // use external default escaping
+			}
+		}
+	});
 }
 
 /**
@@ -957,38 +971,7 @@ SimpleMDE.toolbar = ["bold", "italic", "heading", "|", "quote", "unordered-list"
  * Default markdown render.
  */
 SimpleMDE.prototype.markdown = function(text) {
-	if(marked) {
-		// Initialize
-		var markedOptions = {};
-
-
-		// Update options
-		if(this.options && this.options.renderingConfig && this.options.renderingConfig.singleLineBreaks !== false) {
-			markedOptions.breaks = true;
-		}
-
-		if(this.options && this.options.renderingConfig && this.options.renderingConfig.codeSyntaxHighlighting === true && hljs) {
-			markedOptions.highlight = function(code, lang) {
-				if(lang) {
-					try {
-						return hljs.highlight(lang, code).value;
-					} catch(e) {
-						return hljs.highlightAuto(code).value;
-					}
-				} else {
-					return hljs.highlightAuto(code).value;
-				}
-			};
-		}
-
-
-		// Set options
-		marked.setOptions(markedOptions);
-
-
-		// Return
-		return marked(text);
-	}
+	return this.md.render(text);
 };
 
 SimpleMDE.prototype.destroy = function() {

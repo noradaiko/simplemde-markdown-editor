@@ -111,5 +111,5 @@ require("codemirror/mode/yaml/yaml.js");
 require("codemirror/mode/z80/z80.js");
 
 CodeMirror.modeInfo.push({
-  name: "ObjectiveC", mime: "text/x-objectivec", mode: "clike", ext: ["m", "mm"], alias: ["objc", "objective-c"]
+	name: "ObjectiveC", mime: "text/x-objectivec", mode: "clike", ext: ["m", "mm"], alias: ["objc", "objective-c"]
 });
