@@ -961,6 +961,10 @@ function SimpleMDE(options) {
 			}
 		}
 	});
+	this.md.use(require("markdown-it-checkbox"), {
+		divWrap: true,
+		divClass: "ui checkbox"
+	});
 }
 
 /**
@@ -1128,7 +1132,7 @@ SimpleMDE.prototype.createSideBySide = function() {
 
 	if(!preview || !/editor-preview-side/.test(preview.className)) {
 		preview = document.createElement("div");
-		preview.className = "editor-preview-side";
+		preview.className = "editor-preview-side markdown-body";
 		wrapper.parentNode.insertBefore(preview, wrapper.nextSibling);
 	}
 
