@@ -541,7 +541,7 @@
 },{}],2:[function(require,module,exports){
 (function (global){
 
-; Typo = global.Typo = require("/Users/nora/Developments/local/tmp/e4p/simplemde-markdown-editor/node_modules/codemirror-spell-checker/src/js/typo.js");
+; Typo = global.Typo = require("/Users/nora/Developments/local/pkpk/adlib/simplemde-markdown-editor/node_modules/codemirror-spell-checker/src/js/typo.js");
 CodeMirror = global.CodeMirror = require("codemirror");
 ; var __browserify_shim_require__=require;(function browserifyShim(module, define, require) {
 // Initialize data globally to reduce memory consumption
@@ -639,7 +639,7 @@ if(!String.prototype.includes) {
 }).call(global, module, undefined, undefined);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"/Users/nora/Developments/local/tmp/e4p/simplemde-markdown-editor/node_modules/codemirror-spell-checker/src/js/typo.js":3,"codemirror":13}],3:[function(require,module,exports){
+},{"/Users/nora/Developments/local/pkpk/adlib/simplemde-markdown-editor/node_modules/codemirror-spell-checker/src/js/typo.js":3,"codemirror":13}],3:[function(require,module,exports){
 (function (global){
 ; var __browserify_shim_require__=require;(function browserifyShim(module, exports, require, define, browserify_shim__define__module__export__) {
 'use strict';
