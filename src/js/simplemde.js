@@ -11,6 +11,7 @@ require("codemirror/addon/dialog/dialog.js");
 require("codemirror/mode/markdown/markdown.js");
 require("codemirror/addon/mode/overlay.js");
 require("./codemirror/modes.js");
+require("codemirror/keymap/vim.js");
 /*
 require("codemirror/mode/gfm/gfm.js");
 require("codemirror/mode/javascript/javascript.js");
@@ -22,7 +23,7 @@ require("codemirror/mode/swift/swift.js");
 require("codemirror/mode/sql/sql.js");
 //require("codemirror/mode/meta.js");
 */
-require("spell-checker");
+//require("spell-checker");
 var hljs = require("highlight.js");
 var _ = require("underscore");
 var md = require("markdown-it");
@@ -34,7 +35,7 @@ var shortcuts = {
 	"Cmd-B": toggleBold,
 	"Cmd-I": toggleItalic,
 	"Cmd-K": drawLink,
-	"Cmd-H": toggleHeadingSmaller,
+	//"Cmd-H": toggleHeadingSmaller,
 	"Shift-Cmd-H": toggleHeadingBigger,
 	"Cmd-Alt-I": drawImage,
 	"Cmd-'": toggleBlockquote,
@@ -1019,10 +1020,10 @@ SimpleMDE.prototype.render = function(el) {
 	};
 	keyMaps["F9"] = function() {
 		toggleSideBySide(self);
-	};
+	};/*
 	keyMaps["Esc"] = function(cm) {
 		if(cm.getOption("fullScreen")) toggleFullScreen(self);
-	};
+	};*/
 
 	var mode, backdrop;
 	if(options.spellChecker !== false) {
@@ -1039,6 +1040,8 @@ SimpleMDE.prototype.render = function(el) {
 
 	this.codemirror = CodeMirror.fromTextArea(el, {
 		mode: mode,
+		keyMap: "vim",
+		showCursorWhenSelecting: true,
 		backdrop: backdrop,
 		placeholder: options.placeholder || "",
 		theme: options.theme || "solarized-dark",
