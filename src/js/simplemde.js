@@ -11,7 +11,6 @@ require("codemirror/addon/dialog/dialog.js");
 require("codemirror/mode/markdown/markdown.js");
 require("codemirror/addon/mode/overlay.js");
 require("./codemirror/modes.js");
-require("codemirror/keymap/vim.js");
 /*
 require("codemirror/mode/gfm/gfm.js");
 require("codemirror/mode/javascript/javascript.js");
@@ -1040,7 +1039,6 @@ SimpleMDE.prototype.render = function(el) {
 
 	this.codemirror = CodeMirror.fromTextArea(el, {
 		mode: mode,
-		keyMap: "vim",
 		showCursorWhenSelecting: true,
 		backdrop: backdrop,
 		placeholder: options.placeholder || "",
