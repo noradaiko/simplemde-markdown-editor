@@ -961,10 +961,11 @@ function SimpleMDE(options) {
 			}
 		}
 	});
+  /*
 	this.md.use(require("markdown-it-checkbox"), {
 		divWrap: true,
 		divClass: "ui checkbox"
-	});
+	});*/
 }
 
 /**
