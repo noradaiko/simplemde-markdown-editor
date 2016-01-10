@@ -26,6 +26,7 @@ require("codemirror/mode/sql/sql.js");
 var hljs = require("highlight.js");
 var _ = require("underscore");
 var md = require("markdown-it");
+var Emitter = require("event-kit").Emitter;
 
 // Some variables
 var isMac = /Mac/.test(navigator.platform);
@@ -371,11 +372,13 @@ function enableSideBySide(editor) {
 		wrapper.className += " CodeMirror-sided";
 
 		// Start preview with the current text
-		preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+		//preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+		editor.updatePreview();
 
 		// Updates preview
 		editor._updatePreview = _.throttle(function() {
-			preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+			//preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+			editor.updatePreview();
 		}, 1000);
 		cm.on("update", editor._updatePreview);
 		_.defer(function() {
@@ -445,7 +448,8 @@ function showPreview(editor) {
 		toolbar.className += " active";
 		toolbar_div.className += " disabled-for-preview";
 		wrapper.className += " hidden-for-preview";
-		preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+		// preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+		editor.updatePreview();
 
 		// Turn off side by side if needed
 		if(/editor-preview-active-side/.test(preview.className)) {
@@ -934,6 +938,7 @@ function SimpleMDE(options) {
 	// Update this options
 	this.options = options;
 
+	this.emitter = new Emitter();
 
 	// Auto render
 	this.render();
@@ -961,7 +966,8 @@ function SimpleMDE(options) {
 			}
 		}
 	});
-  /*
+
+	/*
 	this.md.use(require("markdown-it-checkbox"), {
 		divWrap: true,
 		divClass: "ui checkbox"
@@ -983,6 +989,7 @@ SimpleMDE.prototype.markdown = function(text) {
 SimpleMDE.prototype.destroy = function() {
 	this.container.parentNode.removeChild(this.container);
 	this.toolbarContainer.parentNode.removeChild(this.toolbarContainer);
+	this.emitter.dispose();
 };
 
 /**
@@ -1138,7 +1145,7 @@ SimpleMDE.prototype.createSideBySide = function() {
 		wrapper.parentNode.insertBefore(preview, wrapper.nextSibling);
 	}
 
-	// Syncs scroll  editor -> preview
+	// Syncs scroll	editor -> preview
 	var cScroll = false;
 	var pScroll = false;
 	cm.on("scroll", function(v) {
@@ -1153,7 +1160,7 @@ SimpleMDE.prototype.createSideBySide = function() {
 		preview.scrollTop = move;
 	});
 
-	// Syncs scroll  preview -> editor
+	// Syncs scroll	preview -> editor
 	preview.onscroll = function() {
 		if(pScroll) {
 			pScroll = false;
@@ -1420,6 +1427,17 @@ SimpleMDE.prototype.updatePreview = function() {
 	var preview = wrapper.nextSibling;
 
 	preview.innerHTML = this.options.previewRender(this.value(), preview);
+	this.emitter.emit("did-update-preview", this);
+};
+
+SimpleMDE.prototype.getPreview = function() {
+	var cm = this.codemirror;
+	var wrapper = cm.getWrapperElement();
+	return wrapper.nextSibling;
+};
+
+SimpleMDE.prototype.onDidUpdatePreview = function(callback) {
+	return this.emitter.on("did-update-preview", callback);
 };
 
 module.exports = SimpleMDE;
