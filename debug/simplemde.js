@@ -597,6 +597,8 @@
 
     var inp = dialog.getElementsByTagName("input")[0], button;
     if (inp) {
+      inp.focus();
+
       if (options.value) {
         inp.value = options.value;
         if (options.selectValueOnOpen !== false) {
@@ -620,8 +622,6 @@
       });
 
       if (options.closeOnBlur !== false) CodeMirror.on(inp, "blur", close);
-
-      inp.focus();
     } else if (button = dialog.getElementsByTagName("button")[0]) {
       CodeMirror.on(button, "click", function() {
         close();
@@ -1719,7 +1719,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
   else if (typeof define == "function" && define.amd) // AMD
     return define([], mod);
   else // Plain browser env
-    this.CodeMirror = mod();
+    (this || window).CodeMirror = mod();
 })(function() {
   "use strict";
 
@@ -2249,6 +2249,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
 
     d.sizer.style.paddingRight = (d.barWidth = sizes.right) + "px";
     d.sizer.style.paddingBottom = (d.barHeight = sizes.bottom) + "px";
+    d.heightForcer.style.borderBottom = sizes.bottom + "px solid transparent"
 
     if (sizes.right && sizes.bottom) {
       d.scrollbarFiller.style.display = "block";
@@ -2493,9 +2494,9 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
 
   function setDocumentHeight(cm, measure) {
     cm.display.sizer.style.minHeight = measure.docHeight + "px";
-    var total = measure.docHeight + cm.display.barHeight;
-    cm.display.heightForcer.style.top = total + "px";
-    cm.display.gutters.style.height = Math.max(total + scrollGap(cm), measure.clientHeight) + "px";
+    cm.display.heightForcer.style.top = measure.docHeight + "px";
+    cm.display.gutters.style.height = Math.max(measure.docHeight + cm.display.barHeight + scrollGap(cm),
+                                               measure.clientHeight) + "px";
   }
 
   // Read the actual heights of the rendered lines, and update their
@@ -2957,13 +2958,14 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       });
 
       on(te, "paste", function(e) {
-        if (handlePaste(e, cm)) return true;
+        if (signalDOMEvent(cm, e) || handlePaste(e, cm)) return
 
         cm.state.pasteIncoming = true;
         input.fastPoll();
       });
 
       function prepareCopyCut(e) {
+        if (signalDOMEvent(cm, e)) return
         if (cm.somethingSelected()) {
           lastCopied = cm.getSelections();
           if (input.inaccurateSelection) {
@@ -2991,7 +2993,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       on(te, "copy", prepareCopyCut);
 
       on(display.scroller, "paste", function(e) {
-        if (eventInWidget(display, e)) return;
+        if (eventInWidget(display, e) || signalDOMEvent(cm, e)) return;
         cm.state.pasteIncoming = true;
         input.focus();
       });
@@ -3187,10 +3189,11 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       if (reset && cm.doc.sel.contains(pos) == -1)
         operation(cm, setSelection)(cm.doc, simpleSelection(pos), sel_dontScroll);
 
-      var oldCSS = te.style.cssText;
-      input.wrapper.style.position = "absolute";
-      te.style.cssText = "position: fixed; width: 30px; height: 30px; top: " + (e.clientY - 5) +
-        "px; left: " + (e.clientX - 5) + "px; z-index: 1000; background: " +
+      var oldCSS = te.style.cssText, oldWrapperCSS = input.wrapper.style.cssText;
+      input.wrapper.style.cssText = "position: absolute"
+      var wrapperBox = input.wrapper.getBoundingClientRect()
+      te.style.cssText = "position: absolute; width: 30px; height: 30px; top: " + (e.clientY - wrapperBox.top - 5) +
+        "px; left: " + (e.clientX - wrapperBox.left - 5) + "px; z-index: 1000; background: " +
         (ie ? "rgba(255, 255, 255, .05)" : "transparent") +
         "; outline: none; border-width: 0; outline: none; overflow: hidden; opacity: .05; filter: alpha(opacity=5);";
       if (webkit) var oldScrollY = window.scrollY; // Work around Chrome issue (#2712)
@@ -3221,7 +3224,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       }
       function rehide() {
         input.contextMenuPending = false;
-        input.wrapper.style.position = "relative";
+        input.wrapper.style.cssText = oldWrapperCSS
         te.style.cssText = oldCSS;
         if (ie && ie_version < 9) display.scrollbars.setScrollTop(display.scroller.scrollTop = scrollPos);
 
@@ -3276,7 +3279,9 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       var div = input.div = display.lineDiv;
       disableBrowserMagic(div);
 
-      on(div, "paste", function(e) { handlePaste(e, cm); })
+      on(div, "paste", function(e) {
+        if (!signalDOMEvent(cm, e)) handlePaste(e, cm);
+      })
 
       on(div, "compositionstart", function(e) {
         var data = e.data;
@@ -3319,6 +3324,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       });
 
       function onCopyCut(e) {
+        if (signalDOMEvent(cm, e)) return
         if (cm.somethingSelected()) {
           lastCopied = cm.getSelections();
           if (e.type == "cut") cm.replaceSelection("", null, "cut");
@@ -3861,7 +3867,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
 
   // Give beforeSelectionChange handlers a change to influence a
   // selection update.
-  function filterSelectionChange(doc, sel) {
+  function filterSelectionChange(doc, sel, options) {
     var obj = {
       ranges: sel.ranges,
       update: function(ranges) {
@@ -3869,7 +3875,8 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
         for (var i = 0; i < ranges.length; i++)
           this.ranges[i] = new Range(clipPos(doc, ranges[i].anchor),
                                      clipPos(doc, ranges[i].head));
-      }
+      },
+      origin: options && options.origin
     };
     signal(doc, "beforeSelectionChange", doc, obj);
     if (doc.cm) signal(doc.cm, "beforeSelectionChange", doc.cm, obj);
@@ -3895,7 +3902,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
 
   function setSelectionNoUndo(doc, sel, options) {
     if (hasHandler(doc, "beforeSelectionChange") || doc.cm && hasHandler(doc.cm, "beforeSelectionChange"))
-      sel = filterSelectionChange(doc, sel);
+      sel = filterSelectionChange(doc, sel, options);
 
     var bias = options && options.bias ||
       (cmp(sel.primary().head, doc.sel.primary().head) < 0 ? -1 : 1);
@@ -4840,7 +4847,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       display.scroller.scrollTop = doc.scrollTop;
     }
     if (op.scrollLeft != null && (display.scroller.scrollLeft != op.scrollLeft || op.forceScroll)) {
-      doc.scrollLeft = Math.max(0, Math.min(display.scroller.scrollWidth - displayWidth(cm), op.scrollLeft));
+      doc.scrollLeft = Math.max(0, Math.min(display.scroller.scrollWidth - display.scroller.clientWidth, op.scrollLeft));
       display.scrollbars.setScrollLeft(doc.scrollLeft);
       display.scroller.scrollLeft = doc.scrollLeft;
       alignHorizontally(cm);
@@ -5136,7 +5143,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       return dx * dx + dy * dy > 20 * 20;
     }
     on(d.scroller, "touchstart", function(e) {
-      if (!isMouseLikeTouchEvent(e)) {
+      if (!signalDOMEvent(cm, e) && !isMouseLikeTouchEvent(e)) {
         clearTimeout(touchFinished);
         var now = +new Date;
         d.activeTouch = {start: now, moved: false,
@@ -5265,7 +5272,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
   // not interfere with, such as a scrollbar or widget.
   function onMouseDown(e) {
     var cm = this, display = cm.display;
-    if (display.activeTouch && display.input.supportsTouch() || signalDOMEvent(cm, e)) return;
+    if (signalDOMEvent(cm, e) || display.activeTouch && display.input.supportsTouch()) return;
     display.shift = e.shiftKey;
 
     if (eventInWidget(display, e)) {
@@ -6517,10 +6524,9 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
   function findPosH(doc, pos, dir, unit, visually) {
     var line = pos.line, ch = pos.ch, origDir = dir;
     var lineObj = getLine(doc, line);
-    var possible = true;
     function findNextLine() {
       var l = line + dir;
-      if (l < doc.first || l >= doc.first + doc.size) return (possible = false);
+      if (l < doc.first || l >= doc.first + doc.size) return false
       line = l;
       return lineObj = getLine(doc, l);
     }
@@ -6530,14 +6536,16 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
         if (!boundToLine && findNextLine()) {
           if (visually) ch = (dir < 0 ? lineRight : lineLeft)(lineObj);
           else ch = dir < 0 ? lineObj.text.length : 0;
-        } else return (possible = false);
+        } else return false
       } else ch = next;
       return true;
     }
 
-    if (unit == "char") moveOnce();
-    else if (unit == "column") moveOnce(true);
-    else if (unit == "word" || unit == "group") {
+    if (unit == "char") {
+      moveOnce()
+    } else if (unit == "column") {
+      moveOnce(true)
+    } else if (unit == "word" || unit == "group") {
       var sawType = null, group = unit == "group";
       var helper = doc.cm && doc.cm.getHelper(pos, "wordChars");
       for (var first = true;; first = false) {
@@ -6558,7 +6566,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       }
     }
     var result = skipAtomic(doc, Pos(line, ch), pos, origDir, true);
-    if (!possible) result.hitSide = true;
+    if (!cmp(pos, result)) result.hitSide = true;
     return result;
   }
 
@@ -8792,7 +8800,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       if (nextChange == pos) { // Update current marker set
         spanStyle = spanEndStyle = spanStartStyle = title = css = "";
         collapsed = null; nextChange = Infinity;
-        var foundBookmarks = [];
+        var foundBookmarks = [], endStyles
         for (var j = 0; j < spans.length; ++j) {
           var sp = spans[j], m = sp.marker;
           if (m.type == "bookmark" && sp.from == pos && m.widgetNode) {
@@ -8805,7 +8813,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
             if (m.className) spanStyle += " " + m.className;
             if (m.css) css = (css ? css + ";" : "") + m.css;
             if (m.startStyle && sp.from == pos) spanStartStyle += " " + m.startStyle;
-            if (m.endStyle && sp.to == nextChange) spanEndStyle += " " + m.endStyle;
+            if (m.endStyle && sp.to == nextChange) (endStyles || (endStyles = [])).push(m.endStyle, sp.to)
             if (m.title && !title) title = m.title;
             if (m.collapsed && (!collapsed || compareCollapsedMarkers(collapsed.marker, m) < 0))
               collapsed = sp;
@@ -8813,14 +8821,17 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
             nextChange = sp.from;
           }
         }
+        if (endStyles) for (var j = 0; j < endStyles.length; j += 2)
+          if (endStyles[j + 1] == nextChange) spanEndStyle += " " + endStyles[j]
+
+        if (!collapsed || collapsed.from == pos) for (var j = 0; j < foundBookmarks.length; ++j)
+          buildCollapsedSpan(builder, 0, foundBookmarks[j]);
         if (collapsed && (collapsed.from || 0) == pos) {
           buildCollapsedSpan(builder, (collapsed.to == null ? len + 1 : collapsed.to) - pos,
                              collapsed.marker, collapsed.from == null);
           if (collapsed.to == null) return;
           if (collapsed.to == pos) collapsed = false;
         }
-        if (!collapsed && foundBookmarks.length) for (var j = 0; j < foundBookmarks.length; ++j)
-          buildCollapsedSpan(builder, 0, foundBookmarks[j]);
       }
       if (pos >= len) break;
 
@@ -9160,10 +9171,11 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       extendSelection(this, clipPos(this, head), other && clipPos(this, other), options);
     }),
     extendSelections: docMethodOp(function(heads, options) {
-      extendSelections(this, clipPosArray(this, heads, options));
+      extendSelections(this, clipPosArray(this, heads), options);
     }),
     extendSelectionsBy: docMethodOp(function(f, options) {
-      extendSelections(this, map(this.sel.ranges, f), options);
+      var heads = map(this.sel.ranges, f);
+      extendSelections(this, clipPosArray(this, heads), options);
     }),
     setSelections: docMethodOp(function(ranges, primary, options) {
       if (!ranges.length) return;
@@ -9316,9 +9328,9 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
         var spans = line.markedSpans;
         if (spans) for (var i = 0; i < spans.length; i++) {
           var span = spans[i];
-          if (!(lineNo == from.line && from.ch > span.to ||
-                span.from == null && lineNo != from.line||
-                lineNo == to.line && span.from > to.ch) &&
+          if (!(span.to != null && lineNo == from.line && from.ch > span.to ||
+                span.from == null && lineNo != from.line ||
+                span.from != null && lineNo == to.line && span.from > to.ch) &&
               (!filter || filter(span.marker)))
             found.push(span.marker.parent || span.marker);
         }
@@ -10580,7 +10592,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
 
   // THE END
 
-  CodeMirror.version = "5.9.1";
+  CodeMirror.version = "5.12.1";
 
   return CodeMirror;
 });
@@ -11341,6 +11353,42 @@ CodeMirror.defineMIME("text/x-brainfuck","brainfuck")
 })(function(CodeMirror) {
 "use strict";
 
+function Context(indented, column, type, align, prev) {
+  this.indented = indented;
+  this.column = column;
+  this.type = type;
+  this.align = align;
+  this.prev = prev;
+}
+function isStatement(type) {
+  return type == "statement" || type == "switchstatement" || type == "namespace";
+}
+function pushContext(state, col, type) {
+  var indent = state.indented;
+  if (state.context && isStatement(state.context.type) && !isStatement(type))
+    indent = state.context.indented;
+  return state.context = new Context(indent, col, type, null, state.context);
+}
+function popContext(state) {
+  var t = state.context.type;
+  if (t == ")" || t == "]" || t == "}")
+    state.indented = state.context.indented;
+  return state.context = state.context.prev;
+}
+
+function typeBefore(stream, state) {
+  if (state.prevToken == "variable" || state.prevToken == "variable-3") return true;
+  if (/\S(?:[^- ]>|[*\]])\s*$|\*$/.test(stream.string.slice(0, stream.start))) return true;
+}
+
+function isTopScope(context) {
+  for (;;) {
+    if (!context || context.type == "top") return true;
+    if (context.type == "}" && context.prev.type != "namespace") return false;
+    context = context.prev;
+  }
+}
+
 CodeMirror.defineMode("clike", function(config, parserConfig) {
   var indentUnit = config.indentUnit,
       statementIndentUnit = parserConfig.statementIndentUnit || indentUnit,
@@ -11439,42 +11487,6 @@ CodeMirror.defineMode("clike", function(config, parserConfig) {
       maybeEnd = (ch == "*");
     }
     return "comment";
-  }
-
-  function Context(indented, column, type, align, prev) {
-    this.indented = indented;
-    this.column = column;
-    this.type = type;
-    this.align = align;
-    this.prev = prev;
-  }
-  function isStatement(type) {
-    return type == "statement" || type == "switchstatement" || type == "namespace";
-  }
-  function pushContext(state, col, type) {
-    var indent = state.indented;
-    if (state.context && isStatement(state.context.type) && !isStatement(type))
-      indent = state.context.indented;
-    return state.context = new Context(indent, col, type, null, state.context);
-  }
-  function popContext(state) {
-    var t = state.context.type;
-    if (t == ")" || t == "]" || t == "}")
-      state.indented = state.context.indented;
-    return state.context = state.context.prev;
-  }
-
-  function typeBefore(stream, state) {
-    if (state.prevToken == "variable" || state.prevToken == "variable-3") return true;
-    if (/\S(?:[^- ]>|[*\]])\s*$|\*$/.test(stream.string.slice(0, stream.start))) return true;
-  }
-
-  function isTopScope(context) {
-    for (;;) {
-      if (!context || context.type == "top") return true;
-      if (context.type == "}" && context.prev.type != "namespace") return false;
-      context = context.prev;
-    }
   }
 
   // Interface
@@ -11592,21 +11604,18 @@ CodeMirror.defineMode("clike", function(config, parserConfig) {
   var cTypes = "int long char short double float unsigned signed void size_t ptrdiff_t";
 
   function cppHook(stream, state) {
-    if (!state.startOfLine) return false;
-    for (;;) {
-      if (stream.skipTo("\\")) {
-        stream.next();
-        if (stream.eol()) {
-          state.tokenize = cppHook;
-          break;
-        }
-      } else {
-        stream.skipToEnd();
-        state.tokenize = null;
-        break;
+    if (!state.startOfLine) return false
+    for (var ch, next = null; ch = stream.peek();) {
+      if (ch == "\\" && stream.match(/^.$/)) {
+        next = cppHook
+        break
+      } else if (ch == "/" && stream.match(/^\/[\/\*]/, false)) {
+        break
       }
+      stream.next()
     }
-    return "meta";
+    state.tokenize = next
+    return "meta"
   }
 
   function pointerHook(_stream, state) {
@@ -11830,7 +11839,7 @@ CodeMirror.defineMode("clike", function(config, parserConfig) {
     ),
     types: words(
       "AnyVal App Application Array BufferedIterator BigDecimal BigInt Char Console Either " +
-      "Enumeration Equiv Error Exception Fractional Function IndexedSeq Integral Iterable " +
+      "Enumeration Equiv Error Exception Fractional Function IndexedSeq Int Integral Iterable " +
       "Iterator List Map Numeric Nil NotNull Option Ordered Ordering PartialFunction PartialOrdering " +
       "Product Proxy Range Responder Seq Serializable Set Specializable Stream StringBuilder " +
       "StringContext Symbol Throwable Traversable TraversableOnce Tuple Unit Vector " +
@@ -11860,6 +11869,15 @@ CodeMirror.defineMode("clike", function(config, parserConfig) {
       "'": function(stream) {
         stream.eatWhile(/[\w\$_\xa1-\uffff]/);
         return "atom";
+      },
+      "=": function(stream, state) {
+        var cx = state.context
+        if (cx.type == "}" && cx.align && stream.eat(">")) {
+          state.context = new Context(cx.indented, cx.column, cx.type, null, cx.prev)
+          return "operator"
+        } else {
+          return false
+        }
       }
     },
     modeProps: {closeBrackets: {triples: '"'}}
@@ -12166,7 +12184,8 @@ CodeMirror.defineMode("clojure", function (options) {
         sign: /[+-]/,
         exponent: /e/i,
         keyword_char: /[^\s\(\[\;\)\]]/,
-        symbol: /[\w*+!\-\._?:<>\/\xa1-\uffff]/
+        symbol: /[\w*+!\-\._?:<>\/\xa1-\uffff]/,
+        block_indent: /^(?:def|with)[^\/]+$|\/(?:def|with)/
     };
 
     function stateStack(indent, type, prev) { // represents a state stack object
@@ -12202,6 +12221,9 @@ CodeMirror.defineMode("clojure", function (options) {
 
             if ( '.' == stream.peek() ) {
                 stream.eat('.');
+                stream.eatWhile(tests.digit);
+            } else if ('/' == stream.peek() ) {
+                stream.eat('/');
                 stream.eatWhile(tests.digit);
             }
 
@@ -12246,7 +12268,7 @@ CodeMirror.defineMode("clojure", function (options) {
             }
 
             // skip spaces
-            if (stream.eatSpace()) {
+            if (state.mode != "string" && stream.eatSpace()) {
                 return null;
             }
             var returnType = null;
@@ -12294,7 +12316,7 @@ CodeMirror.defineMode("clojure", function (options) {
                         }
 
                         if (keyWord.length > 0 && (indentKeys.propertyIsEnumerable(keyWord) ||
-                                                   /^(?:def|with)/.test(keyWord))) { // indent-word
+                                                   tests.block_indent.test(keyWord))) { // indent-word
                             pushStack(state, indentTemp + INDENT_WORD_SKIP, ch);
                         } else { // non-indent word
                             // we continue eating the spaces
@@ -12347,6 +12369,7 @@ CodeMirror.defineMode("clojure", function (options) {
 });
 
 CodeMirror.defineMIME("text/x-clojure", "clojure");
+CodeMirror.defineMIME("text/x-clojurescript", "clojure");
 
 });
 
@@ -13203,9 +13226,8 @@ CodeMirror.defineMIME("text/x-common-lisp", "commonlisp");
 "use strict";
 
 CodeMirror.defineMode("css", function(config, parserConfig) {
-  var provided = parserConfig;
+  var inline = parserConfig.inline
   if (!parserConfig.propertyKeywords) parserConfig = CodeMirror.resolveMode("text/css");
-  parserConfig.inline = provided.inline;
 
   var indentUnit = config.indentUnit,
       tokenHooks = parserConfig.tokenHooks,
@@ -13559,9 +13581,9 @@ CodeMirror.defineMode("css", function(config, parserConfig) {
   return {
     startState: function(base) {
       return {tokenize: null,
-              state: parserConfig.inline ? "block" : "top",
+              state: inline ? "block" : "top",
               stateArg: null,
-              context: new Context(parserConfig.inline ? "block" : "top", base || 0, null)};
+              context: new Context(inline ? "block" : "top", base || 0, null)};
     },
 
     token: function(stream, state) {
@@ -13644,8 +13666,8 @@ CodeMirror.defineMode("css", function(config, parserConfig) {
     "animation-direction", "animation-duration", "animation-fill-mode",
     "animation-iteration-count", "animation-name", "animation-play-state",
     "animation-timing-function", "appearance", "azimuth", "backface-visibility",
-    "background", "background-attachment", "background-clip", "background-color",
-    "background-image", "background-origin", "background-position",
+    "background", "background-attachment", "background-blend-mode", "background-clip",
+    "background-color", "background-image", "background-origin", "background-position",
     "background-repeat", "background-size", "baseline-shift", "binding",
     "bleed", "bookmark-label", "bookmark-level", "bookmark-state",
     "bookmark-target", "border", "border-bottom", "border-bottom-color",
@@ -13789,11 +13811,12 @@ CodeMirror.defineMode("css", function(config, parserConfig) {
     "capitalize", "caps-lock-indicator", "caption", "captiontext", "caret",
     "cell", "center", "checkbox", "circle", "cjk-decimal", "cjk-earthly-branch",
     "cjk-heavenly-stem", "cjk-ideographic", "clear", "clip", "close-quote",
-    "col-resize", "collapse", "column", "column-reverse", "compact", "condensed", "contain", "content",
+    "col-resize", "collapse", "color", "color-burn", "color-dodge", "column", "column-reverse",
+    "compact", "condensed", "contain", "content",
     "content-box", "context-menu", "continuous", "copy", "counter", "counters", "cover", "crop",
-    "cross", "crosshair", "currentcolor", "cursive", "cyclic", "dashed", "decimal",
+    "cross", "crosshair", "currentcolor", "cursive", "cyclic", "darken", "dashed", "decimal",
     "decimal-leading-zero", "default", "default-button", "destination-atop",
-    "destination-in", "destination-out", "destination-over", "devanagari",
+    "destination-in", "destination-out", "destination-over", "devanagari", "difference",
     "disc", "discard", "disclosure-closed", "disclosure-open", "document",
     "dot-dash", "dot-dot-dash",
     "dotted", "double", "down", "e-resize", "ease", "ease-in", "ease-in-out", "ease-out",
@@ -13804,23 +13827,23 @@ CodeMirror.defineMode("css", function(config, parserConfig) {
     "ethiopic-halehame-gez", "ethiopic-halehame-om-et",
     "ethiopic-halehame-sid-et", "ethiopic-halehame-so-et",
     "ethiopic-halehame-ti-er", "ethiopic-halehame-ti-et", "ethiopic-halehame-tig",
-    "ethiopic-numeric", "ew-resize", "expanded", "extends", "extra-condensed",
+    "ethiopic-numeric", "ew-resize", "exclusion", "expanded", "extends", "extra-condensed",
     "extra-expanded", "fantasy", "fast", "fill", "fixed", "flat", "flex", "flex-end", "flex-start", "footnotes",
     "forwards", "from", "geometricPrecision", "georgian", "graytext", "groove",
-    "gujarati", "gurmukhi", "hand", "hangul", "hangul-consonant", "hebrew",
+    "gujarati", "gurmukhi", "hand", "hangul", "hangul-consonant", "hard-light", "hebrew",
     "help", "hidden", "hide", "higher", "highlight", "highlighttext",
-    "hiragana", "hiragana-iroha", "horizontal", "hsl", "hsla", "icon", "ignore",
+    "hiragana", "hiragana-iroha", "horizontal", "hsl", "hsla", "hue", "icon", "ignore",
     "inactiveborder", "inactivecaption", "inactivecaptiontext", "infinite",
     "infobackground", "infotext", "inherit", "initial", "inline", "inline-axis",
     "inline-block", "inline-flex", "inline-table", "inset", "inside", "intrinsic", "invert",
     "italic", "japanese-formal", "japanese-informal", "justify", "kannada",
     "katakana", "katakana-iroha", "keep-all", "khmer",
     "korean-hangul-formal", "korean-hanja-formal", "korean-hanja-informal",
-    "landscape", "lao", "large", "larger", "left", "level", "lighter",
+    "landscape", "lao", "large", "larger", "left", "level", "lighter", "lighten",
     "line-through", "linear", "linear-gradient", "lines", "list-item", "listbox", "listitem",
     "local", "logical", "loud", "lower", "lower-alpha", "lower-armenian",
     "lower-greek", "lower-hexadecimal", "lower-latin", "lower-norwegian",
-    "lower-roman", "lowercase", "ltr", "malayalam", "match", "matrix", "matrix3d",
+    "lower-roman", "lowercase", "ltr", "luminosity", "malayalam", "match", "matrix", "matrix3d",
     "media-controls-background", "media-current-time-display",
     "media-fullscreen-button", "media-mute-button", "media-play-button",
     "media-return-to-realtime-button", "media-rewind-button",
@@ -13829,7 +13852,7 @@ CodeMirror.defineMode("css", function(config, parserConfig) {
     "media-volume-slider-container", "media-volume-sliderthumb", "medium",
     "menu", "menulist", "menulist-button", "menulist-text",
     "menulist-textfield", "menutext", "message-box", "middle", "min-intrinsic",
-    "mix", "mongolian", "monospace", "move", "multiple", "myanmar", "n-resize",
+    "mix", "mongolian", "monospace", "move", "multiple", "multiply", "myanmar", "n-resize",
     "narrower", "ne-resize", "nesw-resize", "no-close-quote", "no-drop",
     "no-open-quote", "no-repeat", "none", "normal", "not-allowed", "nowrap",
     "ns-resize", "numbers", "numeric", "nw-resize", "nwse-resize", "oblique", "octal", "open-quote",
@@ -13843,7 +13866,7 @@ CodeMirror.defineMode("css", function(config, parserConfig) {
     "repeating-radial-gradient", "repeat-x", "repeat-y", "reset", "reverse",
     "rgb", "rgba", "ridge", "right", "rotate", "rotate3d", "rotateX", "rotateY",
     "rotateZ", "round", "row", "row-resize", "row-reverse", "rtl", "run-in", "running",
-    "s-resize", "sans-serif", "scale", "scale3d", "scaleX", "scaleY", "scaleZ",
+    "s-resize", "sans-serif", "saturation", "scale", "scale3d", "scaleX", "scaleY", "scaleZ", "screen",
     "scroll", "scrollbar", "se-resize", "searchfield",
     "searchfield-cancel-button", "searchfield-decoration",
     "searchfield-results-button", "searchfield-results-decoration",
@@ -13851,7 +13874,7 @@ CodeMirror.defineMode("css", function(config, parserConfig) {
     "simp-chinese-formal", "simp-chinese-informal", "single",
     "skew", "skewX", "skewY", "skip-white-space", "slide", "slider-horizontal",
     "slider-vertical", "sliderthumb-horizontal", "sliderthumb-vertical", "slow",
-    "small", "small-caps", "small-caption", "smaller", "solid", "somali",
+    "small", "small-caps", "small-caption", "smaller", "soft-light", "solid", "somali",
     "source-atop", "source-in", "source-out", "source-over", "space", "space-around", "space-between", "spell-out", "square",
     "square-button", "start", "static", "status-bar", "stretch", "stroke", "sub",
     "subpixel-antialiased", "super", "sw-resize", "symbolic", "symbols", "table",
@@ -14602,11 +14625,13 @@ CodeMirror.defineMIME("text/x-diff", "diff");
                    "truncatechars_html", "truncatewords", "truncatewords_html",
                    "unordered_list", "upper", "urlencode", "urlize",
                    "urlizetrunc", "wordcount", "wordwrap", "yesno"],
-        operators = ["==", "!=", "<", ">", "<=", ">=", "in", "not", "or", "and"];
+        operators = ["==", "!=", "<", ">", "<=", ">="],
+        wordOperators = ["in", "not", "or", "and"];
 
     keywords = new RegExp("^\\b(" + keywords.join("|") + ")\\b");
     filters = new RegExp("^\\b(" + filters.join("|") + ")\\b");
     operators = new RegExp("^\\b(" + operators.join("|") + ")\\b");
+    wordOperators = new RegExp("^\\b(" + wordOperators.join("|") + ")\\b");
 
     // We have to return "null" instead of null, in order to avoid string
     // styling as the default, when using Django templates inside HTML
@@ -14626,7 +14651,7 @@ CodeMirror.defineMIME("text/x-diff", "diff");
 
       // Ignore completely any stream series that do not match the
       // Django template opening tags.
-      while (stream.next() != null && !stream.match("{{", false) && !stream.match("{%", false)) {}
+      while (stream.next() != null && !stream.match(/\{[{%#]/, false)) {}
       return null;
     }
 
@@ -14837,6 +14862,11 @@ CodeMirror.defineMIME("text/x-diff", "diff");
         return "operator";
       }
 
+      // Attempt to match a word operator
+      if (stream.match(wordOperators)) {
+        return "keyword";
+      }
+
       // Attempt to match a keyword
       var keywordMatch = stream.match(keywords);
       if (keywordMatch) {
@@ -14877,9 +14907,8 @@ CodeMirror.defineMIME("text/x-diff", "diff");
 
     // Mark everything as comment inside the tag and the tag itself.
     function inComment (stream, state) {
-      if (stream.match("#}")) {
-        state.tokenize = tokenBase;
-      }
+      if (stream.match(/^.*?#\}/)) state.tokenize = tokenBase
+      else stream.skipToEnd()
       return "comment";
     }
 
@@ -19453,13 +19482,9 @@ CodeMirror.defineMIME("text/x-hxml", "hxml");
     return attrRegexpCache[attr] = new RegExp("\\s+" + attr + "\\s*=\\s*('|\")?([^'\"]+)('|\")?\\s*");
   }
 
-  function getAttrValue(stream, attr) {
-    var pos = stream.pos, match;
-    while (pos >= 0 && stream.string.charAt(pos) !== "<") pos--;
-    if (pos < 0) return pos;
-    if (match = stream.string.slice(pos, stream.pos).match(getAttrRegexp(attr)))
-      return match[2];
-    return "";
+  function getAttrValue(text, attr) {
+    var match = text.match(getAttrRegexp(attr))
+    return match ? match[2] : ""
   }
 
   function getTagRegexp(tagName, anchored) {
@@ -19475,10 +19500,10 @@ CodeMirror.defineMIME("text/x-hxml", "hxml");
     }
   }
 
-  function findMatchingMode(tagInfo, stream) {
+  function findMatchingMode(tagInfo, tagText) {
     for (var i = 0; i < tagInfo.length; i++) {
       var spec = tagInfo[i];
-      if (!spec[0] || spec[1].test(getAttrValue(stream, spec[0]))) return spec[2];
+      if (!spec[0] || spec[1].test(getAttrValue(tagText, spec[0]))) return spec[2];
     }
   }
 
@@ -19498,15 +19523,17 @@ CodeMirror.defineMIME("text/x-hxml", "hxml");
       tags.script.unshift(["type", configScript[i].matches, configScript[i].mode])
 
     function html(stream, state) {
-      var tagName = state.htmlState.tagName && state.htmlState.tagName.toLowerCase();
-      var tagInfo = tagName && tags.hasOwnProperty(tagName) && tags[tagName];
-
-      var style = htmlMode.token(stream, state.htmlState), modeSpec;
-
-      if (tagInfo && /\btag\b/.test(style) && stream.current() === ">" &&
-          (modeSpec = findMatchingMode(tagInfo, stream))) {
-        var mode = CodeMirror.getMode(config, modeSpec);
-        var endTagA = getTagRegexp(tagName, true), endTag = getTagRegexp(tagName, false);
+      var style = htmlMode.token(stream, state.htmlState), tag = /\btag\b/.test(style), tagName
+      if (tag && !/[<>\s\/]/.test(stream.current()) &&
+          (tagName = state.htmlState.tagName && state.htmlState.tagName.toLowerCase()) &&
+          tags.hasOwnProperty(tagName)) {
+        state.inTag = tagName + " "
+      } else if (state.inTag && tag && />$/.test(stream.current())) {
+        var inTag = /^([\S]+) (.*)/.exec(state.inTag)
+        state.inTag = null
+        var modeSpec = stream.current() == ">" && findMatchingMode(tags[inTag[1]], inTag[2])
+        var mode = CodeMirror.getMode(config, modeSpec)
+        var endTagA = getTagRegexp(inTag[1], true), endTag = getTagRegexp(inTag[1], false);
         state.token = function (stream, state) {
           if (stream.match(endTagA, false)) {
             state.token = html;
@@ -19517,6 +19544,9 @@ CodeMirror.defineMIME("text/x-hxml", "hxml");
         };
         state.localMode = mode;
         state.localState = CodeMirror.startState(mode, htmlMode.indent(state.htmlState, ""));
+      } else if (state.inTag) {
+        state.inTag += stream.current()
+        if (stream.eol()) state.inTag += " "
       }
       return style;
     };
@@ -19524,7 +19554,7 @@ CodeMirror.defineMIME("text/x-hxml", "hxml");
     return {
       startState: function () {
         var state = htmlMode.startState();
-        return {token: html, localMode: null, localState: null, htmlState: state};
+        return {token: html, inTag: null, localMode: null, localState: null, htmlState: state};
       },
 
       copyState: function (state) {
@@ -19532,7 +19562,8 @@ CodeMirror.defineMIME("text/x-hxml", "hxml");
         if (state.localState) {
           local = CodeMirror.copyState(state.localMode, state.localState);
         }
-        return {token: state.token, localMode: state.localMode, localState: local,
+        return {token: state.token, inTag: state.inTag,
+                localMode: state.localMode, localState: local,
                 htmlState: CodeMirror.copyState(htmlMode, state.htmlState)};
       },
 
@@ -20042,7 +20073,7 @@ CodeMirror.defineMode('jade', function (config) {
     res.javaScriptArguments = this.javaScriptArguments;
     res.javaScriptArgumentsDepth = this.javaScriptArgumentsDepth;
     res.isInterpolating = this.isInterpolating;
-    res.interpolationNesting = this.intpolationNesting;
+    res.interpolationNesting = this.interpolationNesting;
 
     res.jsState = CodeMirror.copyState(jsMode, this.jsState);
 
@@ -20135,7 +20166,7 @@ CodeMirror.defineMode('jade', function (config) {
         if (state.interpolationNesting < 0) {
           stream.next();
           state.isInterpolating = false;
-          return 'puncutation';
+          return 'punctuation';
         }
       } else if (stream.peek() === '{') {
         state.interpolationNesting++;
@@ -20551,7 +20582,7 @@ CodeMirror.defineMode('jade', function (config) {
     copyState: copyState,
     token: nextToken
   };
-});
+}, 'javascript', 'css', 'htmlmixed');
 
 CodeMirror.defineMIME('text/x-jade', 'jade');
 
@@ -20572,6 +20603,11 @@ CodeMirror.defineMIME('text/x-jade', 'jade');
     mod(CodeMirror);
 })(function(CodeMirror) {
 "use strict";
+
+function expressionAllowed(stream, state, backUp) {
+  return /^(?:operator|sof|keyword c|case|new|[\[{}\(,;:]|=>)$/.test(state.lastType) ||
+    (state.lastType == "quasi" && /\{\s*$/.test(stream.string.slice(0, stream.pos - (backUp || 0))))
+}
 
 CodeMirror.defineMode("javascript", function(config, parserConfig) {
   var indentUnit = config.indentUnit;
@@ -20686,8 +20722,7 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
       } else if (stream.eat("/")) {
         stream.skipToEnd();
         return ret("comment", "comment");
-      } else if (/^(?:operator|sof|keyword c|case|new|[\[{}\(,;:])$/.test(state.lastType) ||
-                 (state.lastType == "quasi" && /\{\s*$/.test(stream.string.slice(0, stream.pos - 1)))) {
+      } else if (expressionAllowed(stream, state, 1)) {
         readRegexp(stream);
         stream.match(/^\b(([gimyu])(?![gimyu]*\2))+\b/);
         return ret("regexp", "string-2");
@@ -21093,6 +21128,7 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
     }
     if (type == "variable") cx.marked = "property";
     if (type == "spread") return cont(pattern);
+    if (type == "}") return pass();
     return cont(expect(":"), pattern, maybeAssign);
   }
   function maybeAssign(_type, value) {
@@ -21215,7 +21251,7 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
         lexical: new JSLexical((basecolumn || 0) - indentUnit, 0, "block", false),
         localVars: parserConfig.localVars,
         context: parserConfig.localVars && {vars: parserConfig.localVars},
-        indented: 0
+        indented: basecolumn || 0
       };
       if (parserConfig.globalVars && typeof parserConfig.globalVars == "object")
         state.globalVars = parserConfig.globalVars;
@@ -21271,7 +21307,13 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
 
     helperType: jsonMode ? "json" : "javascript",
     jsonldMode: jsonldMode,
-    jsonMode: jsonMode
+    jsonMode: jsonMode,
+
+    expressionAllowed: expressionAllowed,
+    skipExpression: function(state) {
+      var top = state.cc[state.cc.length - 1]
+      if (top == expression || top == expressionNoComma) state.cc.pop()
+    }
   };
 });
 
@@ -21451,39 +21493,45 @@ CodeMirror.defineMIME("application/typescript", { name: "javascript", typescript
 CodeMirror.defineMode("julia", function(_conf, parserConf) {
   var ERRORCLASS = 'error';
 
-  function wordRegexp(words) {
-    return new RegExp("^((" + words.join(")|(") + "))\\b");
+  function wordRegexp(words, end) {
+    if (typeof end === 'undefined') { end = "\\b"; }
+    return new RegExp("^((" + words.join(")|(") + "))" + end);
   }
 
-  var operators = parserConf.operators || /^\.?[|&^\\%*+\-<>!=\/]=?|\?|~|:|\$|\.[<>]|<<=?|>>>?=?|\.[<>=]=|->?|\/\/|\bin\b/;
+  var octChar = "\\\\[0-7]{1,3}";
+  var hexChar = "\\\\x[A-Fa-f0-9]{1,2}";
+  var specialChar = "\\\\[abfnrtv0%?'\"\\\\]";
+  var singleChar = "([^\\u0027\\u005C\\uD800-\\uDFFF]|[\\uD800-\\uDFFF][\\uDC00-\\uDFFF])";
+  var operators = parserConf.operators || /^\.?[|&^\\%*+\-<>!=\/]=?|\?|~|:|\$|\.[<>]|<<=?|>>>?=?|\.[<>=]=|->?|\/\/|\bin\b(?!\()|[\u2208\u2209](?!\()/;
   var delimiters = parserConf.delimiters || /^[;,()[\]{}]/;
-  var identifiers = parserConf.identifiers|| /^[_A-Za-z\u00A1-\uFFFF][_A-Za-z0-9\u00A1-\uFFFF]*!*/;
+  var identifiers = parserConf.identifiers || /^[_A-Za-z\u00A1-\uFFFF][\w\u00A1-\uFFFF]*!*/;
+  var charsList = [octChar, hexChar, specialChar, singleChar];
   var blockOpeners = ["begin", "function", "type", "immutable", "let", "macro", "for", "while", "quote", "if", "else", "elseif", "try", "finally", "catch", "do"];
   var blockClosers = ["end", "else", "elseif", "catch", "finally"];
-  var keywordList = ['if', 'else', 'elseif', 'while', 'for', 'begin', 'let', 'end', 'do', 'try', 'catch', 'finally', 'return', 'break', 'continue', 'global', 'local', 'const', 'export', 'import', 'importall', 'using', 'function', 'macro', 'module', 'baremodule', 'type', 'immutable', 'quote', 'typealias', 'abstract', 'bitstype', 'ccall'];
-  var builtinList = ['true', 'false', 'enumerate', 'open', 'close', 'nothing', 'NaN', 'Inf', 'print', 'println', 'Int', 'Int8', 'Uint8', 'Int16', 'Uint16', 'Int32', 'Uint32', 'Int64', 'Uint64', 'Int128', 'Uint128', 'Bool', 'Char', 'Float16', 'Float32', 'Float64', 'Array', 'Vector', 'Matrix', 'String', 'UTF8String', 'ASCIIString', 'error', 'warn', 'info', '@printf'];
+  var keywordList = ['if', 'else', 'elseif', 'while', 'for', 'begin', 'let', 'end', 'do', 'try', 'catch', 'finally', 'return', 'break', 'continue', 'global', 'local', 'const', 'export', 'import', 'importall', 'using', 'function', 'macro', 'module', 'baremodule', 'type', 'immutable', 'quote', 'typealias', 'abstract', 'bitstype'];
+  var builtinList = ['true', 'false', 'nothing', 'NaN', 'Inf'];
 
   //var stringPrefixes = new RegExp("^[br]?('|\")")
-  var stringPrefixes = /^(`|'|"{3}|([br]?"))/;
+  var stringPrefixes = /^(`|"{3}|([brv]?"))/;
+  var chars = wordRegexp(charsList, "'");
   var keywords = wordRegexp(keywordList);
   var builtins = wordRegexp(builtinList);
   var openers = wordRegexp(blockOpeners);
   var closers = wordRegexp(blockClosers);
-  var macro = /^@[_A-Za-z][_A-Za-z0-9]*/;
-  var symbol = /^:[_A-Za-z][_A-Za-z0-9]*/;
+  var macro = /^@[_A-Za-z][\w]*/;
+  var symbol = /^:[_A-Za-z\u00A1-\uFFFF][\w\u00A1-\uFFFF]*!*/;
+  var typeAnnotation = /^::[^,;"{()=$\s]+({[^}]*}+)*/;
 
-  function in_array(state) {
-    var ch = cur_scope(state);
-    if(ch=="[" || ch=="{") {
+  function inArray(state) {
+    var ch = currentScope(state);
+    if (ch == '[') {
       return true;
     }
-    else {
-      return false;
-    }
+    return false;
   }
 
-  function cur_scope(state) {
-    if(state.scopes.length==0) {
+  function currentScope(state) {
+    if (state.scopes.length == 0) {
       return null;
     }
     return state.scopes[state.scopes.length - 1];
@@ -21491,20 +21539,25 @@ CodeMirror.defineMode("julia", function(_conf, parserConf) {
 
   // tokenizers
   function tokenBase(stream, state) {
-    // Handle scope changes
-    var leaving_expr = state.leaving_expr;
-    if(stream.sol()) {
-      leaving_expr = false;
+    // Handle multiline comments
+    if (stream.match(/^#=/, false)) {
+      state.tokenize = tokenComment;
+      return state.tokenize(stream, state);
     }
-    state.leaving_expr = false;
-    if(leaving_expr) {
-      if(stream.match(/^'+/)) {
+
+    // Handle scope changes
+    var leavingExpr = state.leavingExpr;
+    if (stream.sol()) {
+      leavingExpr = false;
+    }
+    state.leavingExpr = false;
+    if (leavingExpr) {
+      if (stream.match(/^'+/)) {
         return 'operator';
       }
-
     }
 
-    if(stream.match(/^\.{2,3}/)) {
+    if (stream.match(/^\.{2,3}/)) {
       return 'operator';
     }
 
@@ -21513,99 +21566,95 @@ CodeMirror.defineMode("julia", function(_conf, parserConf) {
     }
 
     var ch = stream.peek();
-    // Handle Comments
+
+    // Handle single line comments
     if (ch === '#') {
-        stream.skipToEnd();
-        return 'comment';
-    }
-    if(ch==='[') {
-      state.scopes.push("[");
+      stream.skipToEnd();
+      return 'comment';
     }
 
-    if(ch==='{') {
-      state.scopes.push("{");
+    if (ch === '[') {
+      state.scopes.push('[');
     }
 
-    var scope=cur_scope(state);
+    if (ch === '(') {
+      state.scopes.push('(');
+    }
 
-    if(scope==='[' && ch===']') {
+    var scope = currentScope(state);
+
+    if (scope == '[' && ch === ']') {
       state.scopes.pop();
-      state.leaving_expr=true;
+      state.leavingExpr = true;
     }
 
-    if(scope==='{' && ch==='}') {
+    if (scope == '(' && ch === ')') {
       state.scopes.pop();
-      state.leaving_expr=true;
-    }
-
-    if(ch===')') {
-      state.leaving_expr = true;
+      state.leavingExpr = true;
     }
 
     var match;
-    if(!in_array(state) && (match=stream.match(openers, false))) {
+    if (!inArray(state) && (match=stream.match(openers, false))) {
       state.scopes.push(match);
     }
 
-    if(!in_array(state) && stream.match(closers, false)) {
+    if (!inArray(state) && stream.match(closers, false)) {
       state.scopes.pop();
     }
 
-    if(in_array(state)) {
-      if(stream.match(/^end/)) {
+    if (inArray(state)) {
+      if (state.lastToken == 'end' && stream.match(/^:/)) {
+        return 'operator';
+      }
+      if (stream.match(/^end/)) {
         return 'number';
       }
-
     }
 
-    if(stream.match(/^=>/)) {
+    if (stream.match(/^=>/)) {
       return 'operator';
     }
-
 
     // Handle Number Literals
     if (stream.match(/^[0-9\.]/, false)) {
       var imMatcher = RegExp(/^im\b/);
-      var floatLiteral = false;
+      var numberLiteral = false;
       // Floats
-      if (stream.match(/^\d*\.(?!\.)\d+([ef][\+\-]?\d+)?/i)) { floatLiteral = true; }
-      if (stream.match(/^\d+\.(?!\.)\d*/)) { floatLiteral = true; }
-      if (stream.match(/^\.\d+/)) { floatLiteral = true; }
-      if (floatLiteral) {
-          // Float literals may be "imaginary"
-          stream.match(imMatcher);
-          state.leaving_expr = true;
-          return 'number';
-      }
+      if (stream.match(/^\d*\.(?!\.)\d*([Eef][\+\-]?\d+)?/i)) { numberLiteral = true; }
+      if (stream.match(/^\d+\.(?!\.)\d*/)) { numberLiteral = true; }
+      if (stream.match(/^\.\d+/)) { numberLiteral = true; }
+      if (stream.match(/^0x\.[0-9a-f]+p[\+\-]?\d+/i)) { numberLiteral = true; }
       // Integers
-      var intLiteral = false;
-      // Hex
-      if (stream.match(/^0x[0-9a-f]+/i)) { intLiteral = true; }
-      // Binary
-      if (stream.match(/^0b[01]+/i)) { intLiteral = true; }
-      // Octal
-      if (stream.match(/^0o[0-7]+/i)) { intLiteral = true; }
-      // Decimal
-      if (stream.match(/^[1-9]\d*(e[\+\-]?\d+)?/)) {
-          intLiteral = true;
-      }
+      if (stream.match(/^0x[0-9a-f]+/i)) { numberLiteral = true; } // Hex
+      if (stream.match(/^0b[01]+/i)) { numberLiteral = true; } // Binary
+      if (stream.match(/^0o[0-7]+/i)) { numberLiteral = true; } // Octal
+      if (stream.match(/^[1-9]\d*(e[\+\-]?\d+)?/)) { numberLiteral = true; } // Decimal
       // Zero by itself with no other piece of number.
-      if (stream.match(/^0(?![\dx])/i)) { intLiteral = true; }
-      if (intLiteral) {
+      if (stream.match(/^0(?![\dx])/i)) { numberLiteral = true; }
+      if (numberLiteral) {
           // Integer literals may be "long"
           stream.match(imMatcher);
-          state.leaving_expr = true;
+          state.leavingExpr = true;
           return 'number';
       }
     }
 
-    if(stream.match(/^(::)|(<:)/)) {
+    if (stream.match(/^<:/)) {
       return 'operator';
     }
 
+    if (stream.match(typeAnnotation)) {
+      return 'builtin';
+    }
+
     // Handle symbols
-    if(!leaving_expr && stream.match(symbol)) {
-      return 'string';
+    if (!leavingExpr && stream.match(symbol) || stream.match(/:\./)) {
+      return 'builtin';
+    }
+
+    // Handle parametric types
+    if (stream.match(/^{[^}]*}(?=\()/)) {
+      return 'builtin';
     }
 
     // Handle operators and Delimiters
@@ -21613,6 +21662,11 @@ CodeMirror.defineMode("julia", function(_conf, parserConf) {
       return 'operator';
     }
 
+    // Handle Chars
+    if (stream.match(/^'/)) {
+      state.tokenize = tokenChar;
+      return state.tokenize(stream, state);
+    }
 
     // Handle Strings
     if (stream.match(stringPrefixes)) {
@@ -21623,7 +21677,6 @@ CodeMirror.defineMode("julia", function(_conf, parserConf) {
     if (stream.match(macro)) {
       return 'meta';
     }
-
 
     if (stream.match(delimiters)) {
       return null;
@@ -21637,43 +21690,128 @@ CodeMirror.defineMode("julia", function(_conf, parserConf) {
       return 'builtin';
     }
 
+    var isDefinition = state.isDefinition ||
+                       state.lastToken == 'function' ||
+                       state.lastToken == 'macro' ||
+                       state.lastToken == 'type' ||
+                       state.lastToken == 'immutable';
 
     if (stream.match(identifiers)) {
-      state.leaving_expr=true;
+      if (isDefinition) {
+        if (stream.peek() === '.') {
+          state.isDefinition = true;
+          return 'variable';
+        }
+        state.isDefinition = false;
+        return 'def';
+      }
+      if (stream.match(/^({[^}]*})*\(/, false)) {
+        return callOrDef(stream, state);
+      }
+      state.leavingExpr = true;
       return 'variable';
     }
+
     // Handle non-detected items
     stream.next();
     return ERRORCLASS;
   }
 
+  function callOrDef(stream, state) {
+    var match = stream.match(/^(\(\s*)/);
+    if (match) {
+      if (state.firstParenPos < 0)
+        state.firstParenPos = state.scopes.length;
+      state.scopes.push('(');
+      state.charsAdvanced += match[1].length;
+    }
+    if (currentScope(state) == '(' && stream.match(/^\)/)) {
+      state.scopes.pop();
+      state.charsAdvanced += 1;
+      if (state.scopes.length <= state.firstParenPos) {
+        var isDefinition = stream.match(/^\s*?=(?!=)/, false);
+        stream.backUp(state.charsAdvanced);
+        state.firstParenPos = -1;
+        state.charsAdvanced = 0;
+        if (isDefinition)
+          return 'def';
+        return 'builtin';
+      }
+    }
+    // Unfortunately javascript does not support multiline strings, so we have
+    // to undo anything done upto here if a function call or definition splits
+    // over two or more lines.
+    if (stream.match(/^$/g, false)) {
+      stream.backUp(state.charsAdvanced);
+      while (state.scopes.length > state.firstParenPos)
+        state.scopes.pop();
+      state.firstParenPos = -1;
+      state.charsAdvanced = 0;
+      return 'builtin';
+    }
+    state.charsAdvanced += stream.match(/^([^()]*)/)[1].length;
+    return callOrDef(stream, state);
+  }
+
+  function tokenComment(stream, state) {
+    if (stream.match(/^#=/)) {
+      state.weakScopes++;
+    }
+    if (!stream.match(/.*?(?=(#=|=#))/)) {
+      stream.skipToEnd();
+    }
+    if (stream.match(/^=#/)) {
+      state.weakScopes--;
+      if (state.weakScopes == 0)
+        state.tokenize = tokenBase;
+    }
+    return 'comment';
+  }
+
+  function tokenChar(stream, state) {
+    var isChar = false, match;
+    if (stream.match(chars)) {
+      isChar = true;
+    } else if (match = stream.match(/\\u([a-f0-9]{1,4})(?=')/i)) {
+      var value = parseInt(match[1], 16);
+      if (value <= 55295 || value >= 57344) { // (U+0,U+D7FF), (U+E000,U+FFFF)
+        isChar = true;
+        stream.next();
+      }
+    } else if (match = stream.match(/\\U([A-Fa-f0-9]{5,8})(?=')/)) {
+      var value = parseInt(match[1], 16);
+      if (value <= 1114111) { // U+10FFFF
+        isChar = true;
+        stream.next();
+      }
+    }
+    if (isChar) {
+      state.leavingExpr = true;
+      state.tokenize = tokenBase;
+      return 'string';
+    }
+    if (!stream.match(/^[^']+(?=')/)) { stream.skipToEnd(); }
+    if (stream.match(/^'/)) { state.tokenize = tokenBase; }
+    return ERRORCLASS;
+  }
+
   function tokenStringFactory(delimiter) {
-    while ('rub'.indexOf(delimiter.charAt(0).toLowerCase()) >= 0) {
+    while ('bruv'.indexOf(delimiter.charAt(0).toLowerCase()) >= 0) {
       delimiter = delimiter.substr(1);
     }
-    var singleline = delimiter.length == 1;
     var OUTCLASS = 'string';
 
     function tokenString(stream, state) {
       while (!stream.eol()) {
-        stream.eatWhile(/[^'"\\]/);
+        stream.eatWhile(/[^"\\]/);
         if (stream.eat('\\')) {
             stream.next();
-            if (singleline && stream.eol()) {
-              return OUTCLASS;
-            }
         } else if (stream.match(delimiter)) {
             state.tokenize = tokenBase;
+            state.leavingExpr = true;
             return OUTCLASS;
         } else {
-            stream.eat(/['"]/);
-        }
-      }
-      if (singleline) {
-        if (parserConf.singleLineStringErrors) {
-            return ERRORCLASS;
-        } else {
-            state.tokenize = tokenBase;
+            stream.eat(/["]/);
         }
       }
       return OUTCLASS;
@@ -21682,50 +21820,47 @@ CodeMirror.defineMode("julia", function(_conf, parserConf) {
     return tokenString;
   }
 
-  function tokenLexer(stream, state) {
-    var style = state.tokenize(stream, state);
-    var current = stream.current();
-
-    // Handle '.' connected identifiers
-    if (current === '.') {
-      style = stream.match(identifiers, false) ? null : ERRORCLASS;
-      if (style === null && state.lastStyle === 'meta') {
-          // Apply 'meta' style to '.' connected identifiers when
-          // appropriate.
-        style = 'meta';
-      }
-      return style;
-    }
-
-    return style;
-  }
-
   var external = {
     startState: function() {
       return {
         tokenize: tokenBase,
         scopes: [],
-        leaving_expr: false
+        weakScopes: 0,
+        lastToken: null,
+        leavingExpr: false,
+        isDefinition: false,
+        charsAdvanced: 0,
+        firstParenPos: -1
       };
     },
 
     token: function(stream, state) {
-      var style = tokenLexer(stream, state);
-      state.lastStyle = style;
+      var style = state.tokenize(stream, state);
+      var current = stream.current();
+
+      if (current && style) {
+        state.lastToken = current;
+      }
+
+      // Handle '.' connected identifiers
+      if (current === '.') {
+        style = stream.match(identifiers, false) || stream.match(macro, false) ||
+                stream.match(/\(/, false) ? 'operator' : ERRORCLASS;
+      }
       return style;
     },
 
     indent: function(state, textAfter) {
       var delta = 0;
-      if(textAfter=="end" || textAfter=="]" || textAfter=="}" || textAfter=="else" || textAfter=="elseif" || textAfter=="catch" || textAfter=="finally") {
+      if (textAfter == "]" || textAfter == ")" || textAfter == "end" || textAfter == "else" || textAfter == "elseif" || textAfter == "catch" || textAfter == "finally") {
         delta = -1;
       }
       return (state.scopes.length + delta) * _conf.indentUnit;
     },
 
+    electricInput: /(end|else(if)?|catch|finally)$/,
     lineComment: "#",
-    fold: "indent",
-    electricChars: "edlsifyh]}"
+    fold: "indent"
   };
   return external;
 });
@@ -22194,8 +22329,8 @@ CodeMirror.defineMIME("text/x-lua", "lua");
 
 CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
 
-  var htmlFound = CodeMirror.modes.hasOwnProperty("xml");
-  var htmlMode = CodeMirror.getMode(cmCfg, htmlFound ? {name: "xml", htmlMode: true} : "text/plain");
+  var htmlMode = CodeMirror.getMode(cmCfg, "text/html");
+  var htmlModeMissing = htmlMode.name == "null"
 
   function getMode(name) {
     if (CodeMirror.findModeByName) {
@@ -22235,8 +22370,6 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
   // Allow token types to be overridden by user-provided token types.
   if (modeCfg.tokenTypeOverrides === undefined)
     modeCfg.tokenTypeOverrides = {};
-
-  var codeDepth = 0;
 
   var tokenTypes = {
     header: "header",
@@ -22302,7 +22435,7 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
     state.quote = 0;
     // Reset state.indentedCode
     state.indentedCode = false;
-    if (!htmlFound && state.f == htmlBlock) {
+    if (htmlModeMissing && state.f == htmlBlock) {
       state.f = inlineNormal;
       state.block = blockNormal;
     }
@@ -22396,7 +22529,7 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
       if (state.localMode) state.localState = state.localMode.startState();
       state.f = state.block = local;
       if (modeCfg.highlightFormatting) state.formatting = "code-block";
-      state.code = true;
+      state.code = -1
       return getType(state);
     }
 
@@ -22405,18 +22538,21 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
 
   function htmlBlock(stream, state) {
     var style = htmlMode.token(stream, state.htmlState);
-    if ((htmlFound && state.htmlState.tagStart === null &&
-         (!state.htmlState.context && state.htmlState.tokenize.isInText)) ||
-        (state.md_inside && stream.current().indexOf(">") > -1)) {
-      state.f = inlineNormal;
-      state.block = blockNormal;
-      state.htmlState = null;
+    if (!htmlModeMissing) {
+      var inner = CodeMirror.innerMode(htmlMode, state.htmlState)
+      if ((inner.mode.name == "xml" && inner.state.tagStart === null &&
+           (!inner.state.context && inner.state.tokenize.isInText)) ||
+          (state.md_inside && stream.current().indexOf(">") > -1)) {
+        state.f = inlineNormal;
+        state.block = blockNormal;
+        state.htmlState = null;
+      }
     }
     return style;
   }
 
   function local(stream, state) {
-    if (stream.sol() && state.fencedChars && stream.match(state.fencedChars, false)) {
+    if (state.fencedChars && stream.match(state.fencedChars, false)) {
       state.localMode = state.localState = null;
       state.f = state.block = leavingLocal;
       return null;
@@ -22434,9 +22570,9 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
     state.f = inlineNormal;
     state.fencedChars = null;
     if (modeCfg.highlightFormatting) state.formatting = "code-block";
-    state.code = true;
+    state.code = 1
     var returnType = getType(state);
-    state.code = false;
+    state.code = 0
     return returnType;
   }
 
@@ -22559,15 +22695,6 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
 
     var ch = stream.next();
 
-    if (ch === '\\') {
-      stream.next();
-      if (modeCfg.highlightFormatting) {
-        var type = getType(state);
-        var formattingEscape = tokenTypes.formatting + "-escape";
-        return type ? type + " " + formattingEscape : formattingEscape;
-      }
-    }
-
     // Matches link titles present on next line
     if (state.linkTitle) {
       state.linkTitle = false;
@@ -22586,24 +22713,30 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
     if (ch === '`') {
       var previousFormatting = state.formatting;
       if (modeCfg.highlightFormatting) state.formatting = "code";
-      var t = getType(state);
-      var before = stream.pos;
       stream.eatWhile('`');
-      var difference = 1 + stream.pos - before;
-      if (!state.code) {
-        codeDepth = difference;
-        state.code = true;
-        return getType(state);
+      var count = stream.current().length
+      if (state.code == 0) {
+        state.code = count
+        return getType(state)
+      } else if (count == state.code) { // Must be exact
+        var t = getType(state)
+        state.code = 0
+        return t
       } else {
-        if (difference === codeDepth) { // Must be exact
-          state.code = false;
-          return t;
-        }
-        state.formatting = previousFormatting;
-        return getType(state);
+        state.formatting = previousFormatting
+        return getType(state)
       }
     } else if (state.code) {
       return getType(state);
+    }
+
+    if (ch === '\\') {
+      stream.next();
+      if (modeCfg.highlightFormatting) {
+        var type = getType(state);
+        var formattingEscape = tokenTypes.formatting + "-escape";
+        return type ? type + " " + formattingEscape : formattingEscape;
+      }
     }
 
     if (ch === '!' && stream.match(/\[[^\]]*\] ?(?:\(|\[)/, false)) {
@@ -22801,7 +22934,7 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
   }
 
   function footnoteLink(stream, state) {
-    if (stream.match(/^[^\]]*\]:/, false)) {
+    if (stream.match(/^([^\]\\]|\\.)*\]:/, false)) {
       state.f = footnoteLinkInside;
       stream.next(); // Consume [
       if (modeCfg.highlightFormatting) state.formatting = "link";
@@ -22820,7 +22953,7 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
       return returnType;
     }
 
-    stream.match(/^[^\]]+/, true);
+    stream.match(/^([^\]\\]|\\.)+/, true);
 
     return tokenTypes.linkText;
   }
@@ -22873,6 +23006,7 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
         linkText: false,
         linkHref: false,
         linkTitle: false,
+        code: 0,
         em: false,
         strong: false,
         header: 0,
@@ -23185,12 +23319,14 @@ CodeMirror.defineMIME('text/x-mathematica', {
     {name: "Cobol", mime: "text/x-cobol", mode: "cobol", ext: ["cob", "cpy"]},
     {name: "C#", mime: "text/x-csharp", mode: "clike", ext: ["cs"], alias: ["csharp"]},
     {name: "Clojure", mime: "text/x-clojure", mode: "clojure", ext: ["clj"]},
+    {name: "ClojureScript", mime: "text/x-clojurescript", mode: "clojure", ext: ["cljs"]},
     {name: "Closure Stylesheets (GSS)", mime: "text/x-gss", mode: "css", ext: ["gss"]},
     {name: "CMake", mime: "text/x-cmake", mode: "cmake", ext: ["cmake", "cmake.in"], file: /^CMakeLists.txt$/},
     {name: "CoffeeScript", mime: "text/x-coffeescript", mode: "coffeescript", ext: ["coffee"], alias: ["coffee", "coffee-script"]},
     {name: "Common Lisp", mime: "text/x-common-lisp", mode: "commonlisp", ext: ["cl", "lisp", "el"], alias: ["lisp"]},
     {name: "Cypher", mime: "application/x-cypher-query", mode: "cypher", ext: ["cyp", "cypher"]},
     {name: "Cython", mime: "text/x-cython", mode: "python", ext: ["pyx", "pxd", "pxi"]},
+    {name: "Crystal", mime: "text/x-crystal", mode: "crystal", ext: ["cr"]},
     {name: "CSS", mime: "text/css", mode: "css", ext: ["css"]},
     {name: "CQL", mime: "text/x-cassandra", mode: "sql", ext: ["cql"]},
     {name: "D", mime: "text/x-d", mode: "d", ext: ["d"]},
@@ -23208,6 +23344,7 @@ CodeMirror.defineMIME('text/x-mathematica', {
     {name: "Embedded Ruby", mime: "application/x-erb", mode: "htmlembedded", ext: ["erb"]},
     {name: "Erlang", mime: "text/x-erlang", mode: "erlang", ext: ["erl"]},
     {name: "Factor", mime: "text/x-factor", mode: "factor", ext: ["factor"]},
+    {name: "FCL", mime: "text/x-fcl", mode: "fcl"},
     {name: "Forth", mime: "text/x-forth", mode: "forth", ext: ["forth", "fth", "4th"]},
     {name: "Fortran", mime: "text/x-fortran", mode: "fortran", ext: ["f", "for", "f77", "f90"]},
     {name: "F#", mime: "text/x-fsharp", mode: "mllike", ext: ["fs"], alias: ["fsharp"]},
@@ -23215,9 +23352,10 @@ CodeMirror.defineMIME('text/x-mathematica', {
     {name: "Gherkin", mime: "text/x-feature", mode: "gherkin", ext: ["feature"]},
     {name: "GitHub Flavored Markdown", mime: "text/x-gfm", mode: "gfm", file: /^(readme|contributing|history).md$/i},
     {name: "Go", mime: "text/x-go", mode: "go", ext: ["go"]},
-    {name: "Groovy", mime: "text/x-groovy", mode: "groovy", ext: ["groovy"]},
+    {name: "Groovy", mime: "text/x-groovy", mode: "groovy", ext: ["groovy", "gradle"]},
     {name: "HAML", mime: "text/x-haml", mode: "haml", ext: ["haml"]},
     {name: "Haskell", mime: "text/x-haskell", mode: "haskell", ext: ["hs"]},
+    {name: "Haskell (Literate)", mime: "text/x-literate-haskell", mode: "haskell-literate", ext: ["lhs"]},
     {name: "Haxe", mime: "text/x-haxe", mode: "haxe", ext: ["hx"]},
     {name: "HXML", mime: "text/x-hxml", mode: "haxe", ext: ["hxml"]},
     {name: "ASP.NET", mime: "application/x-aspx", mode: "htmlembedded", ext: ["aspx"], alias: ["asp", "aspx"]},
@@ -23231,6 +23369,7 @@ CodeMirror.defineMIME('text/x-mathematica', {
      mode: "javascript", ext: ["js"], alias: ["ecmascript", "js", "node"]},
     {name: "JSON", mimes: ["application/json", "application/x-json"], mode: "javascript", ext: ["json", "map"], alias: ["json5"]},
     {name: "JSON-LD", mime: "application/ld+json", mode: "javascript", ext: ["jsonld"], alias: ["jsonld"]},
+    {name: "JSX", mime: "text/jsx", mode: "jsx", ext: ["jsx"]},
     {name: "Jinja2", mime: "null", mode: "jinja2"},
     {name: "Julia", mime: "text/x-julia", mode: "julia", ext: ["jl"]},
     {name: "Kotlin", mime: "text/x-kotlin", mode: "clike", ext: ["kt"]},
@@ -23242,7 +23381,7 @@ CodeMirror.defineMIME('text/x-mathematica', {
     {name: "MariaDB SQL", mime: "text/x-mariadb", mode: "sql"},
     {name: "Mathematica", mime: "text/x-mathematica", mode: "mathematica", ext: ["m", "nb"]},
     {name: "Modelica", mime: "text/x-modelica", mode: "modelica", ext: ["mo"]},
-    {name: "MUMPS", mime: "text/x-mumps", mode: "mumps"},
+    {name: "MUMPS", mime: "text/x-mumps", mode: "mumps", ext: ["mps"]},
     {name: "MS SQL", mime: "text/x-mssql", mode: "sql"},
     {name: "MySQL", mime: "text/x-mysql", mode: "sql"},
     {name: "Nginx", mime: "text/x-nginx-conf", mode: "nginx", file: /nginx.*\.conf$/i},
@@ -23285,7 +23424,6 @@ CodeMirror.defineMIME('text/x-mathematica', {
     {name: "SQL", mime: "text/x-sql", mode: "sql", ext: ["sql"]},
     {name: "Squirrel", mime: "text/x-squirrel", mode: "clike", ext: ["nut"]},
     {name: "Swift", mime: "text/x-swift", mode: "swift", ext: ["swift"]},
-    {name: "MariaDB", mime: "text/x-mariadb", mode: "sql"},
     {name: "sTeX", mime: "text/x-stex", mode: "stex"},
     {name: "LaTeX", mime: "text/x-latex", mode: "stex", ext: ["text", "ltx"], alias: ["tex"]},
     {name: "SystemVerilog", mime: "text/x-systemverilog", mode: "verilog", ext: ["v"]},
@@ -24505,7 +24643,7 @@ CodeMirror.defineMode("nginx", function(config) {
   };
 });
 
-CodeMirror.defineMIME("text/nginx", "text/x-nginx-conf");
+CodeMirror.defineMIME("text/x-nginx-conf", "nginx");
 
 });
 
@@ -27025,7 +27163,7 @@ CodeMirror.defineMIME("text/x-puppet", "puppet");
     var doubleDelimiters = parserConf.doubleDelimiters || /^(\+=|\-=|\*=|%=|\/=|&=|\|=|\^=)/;
     var tripleDelimiters = parserConf.tripleDelimiters || /^(\/\/=|>>=|<<=|\*\*=)/;
 
-    if (parserConf.version && parseInt(parserConf.version, 10) == 3){
+    if (parserConf.version && parseInt(parserConf.version, 10) == 3) {
         // since http://legacy.python.org/dev/peps/pep-0465/ @ is also an operator
         var singleOperators = parserConf.singleOperators || /^[\+\-\*\/%&|\^~<>!@]/;
         var identifiers = parserConf.identifiers|| /^[_A-Za-z\u00A1-\uFFFF][_A-Za-z0-9\u00A1-\uFFFF]*/;
@@ -27037,12 +27175,12 @@ CodeMirror.defineMIME("text/x-puppet", "puppet");
     var hangingIndent = parserConf.hangingIndent || conf.indentUnit;
 
     var myKeywords = commonKeywords, myBuiltins = commonBuiltins;
-    if(parserConf.extra_keywords != undefined){
+    if (parserConf.extra_keywords != undefined)
       myKeywords = myKeywords.concat(parserConf.extra_keywords);
-    }
-    if(parserConf.extra_builtins != undefined){
+
+    if (parserConf.extra_builtins != undefined)
       myBuiltins = myBuiltins.concat(parserConf.extra_builtins);
-    }
+
     if (parserConf.version && parseInt(parserConf.version, 10) == 3) {
       myKeywords = myKeywords.concat(py3.keywords);
       myBuiltins = myBuiltins.concat(py3.builtins);
@@ -27057,13 +27195,14 @@ CodeMirror.defineMIME("text/x-puppet", "puppet");
 
     // tokenizers
     function tokenBase(stream, state) {
+      if (stream.sol()) state.indent = stream.indentation()
       // Handle scope changes
       if (stream.sol() && top(state).type == "py") {
         var scopeOffset = top(state).offset;
         if (stream.eatSpace()) {
           var lineOffset = stream.indentation();
           if (lineOffset > scopeOffset)
-            pushScope(stream, state, "py");
+            pushPyScope(state);
           else if (lineOffset < scopeOffset && dedent(stream, state))
             state.errorToken = true;
           return null;
@@ -27196,16 +27335,18 @@ CodeMirror.defineMIME("text/x-puppet", "puppet");
       return tokenString;
     }
 
-    function pushScope(stream, state, type) {
-      var offset = 0, align = null;
-      if (type == "py") {
-        while (top(state).type != "py")
-          state.scopes.pop();
-      }
-      offset = top(state).offset + (type == "py" ? conf.indentUnit : hangingIndent);
-      if (type != "py" && !stream.match(/^(\s|#.*)*$/, false))
-        align = stream.column() + 1;
-      state.scopes.push({offset: offset, type: type, align: align});
+    function pushPyScope(state) {
+      while (top(state).type != "py") state.scopes.pop()
+      state.scopes.push({offset: top(state).offset + conf.indentUnit,
+                         type: "py",
+                         align: null})
+    }
+
+    function pushBracketScope(stream, state, type) {
+      var align = stream.match(/^([\s\[\{\(]|#.*)*$/, false) ? null : stream.column() + 1
+      state.scopes.push({offset: state.indent + hangingIndent,
+                         type: type,
+                         align: align})
     }
 
     function dedent(stream, state) {
@@ -27222,12 +27363,11 @@ CodeMirror.defineMIME("text/x-puppet", "puppet");
       var current = stream.current();
 
       // Handle decorators
-      if (current == "@"){
-        if(parserConf.version && parseInt(parserConf.version, 10) == 3){
-            return stream.match(identifiers, false) ? "meta" : "operator";
-        } else {
-            return stream.match(identifiers, false) ? "meta" : ERRORCLASS;
-        }
+      if (current == "@") {
+        if (parserConf.version && parseInt(parserConf.version, 10) == 3)
+          return stream.match(identifiers, false) ? "meta" : "operator";
+        else
+          return stream.match(identifiers, false) ? "meta" : ERRORCLASS;
       }
 
       if ((style == "variable" || style == "builtin")
@@ -27240,15 +27380,15 @@ CodeMirror.defineMIME("text/x-puppet", "puppet");
 
       if (current == "lambda") state.lambda = true;
       if (current == ":" && !state.lambda && top(state).type == "py")
-        pushScope(stream, state, "py");
+        pushPyScope(state);
 
       var delimiter_index = current.length == 1 ? "[({".indexOf(current) : -1;
       if (delimiter_index != -1)
-        pushScope(stream, state, "])}".slice(delimiter_index, delimiter_index+1));
+        pushBracketScope(stream, state, "])}".slice(delimiter_index, delimiter_index+1));
 
       delimiter_index = "])}".indexOf(current);
       if (delimiter_index != -1) {
-        if (top(state).type == current) state.scopes.pop();
+        if (top(state).type == current) state.indent = state.scopes.pop().offset - hangingIndent
         else return ERRORCLASS;
       }
       if (state.dedent > 0 && stream.eol() && top(state).type == "py") {
@@ -27264,6 +27404,7 @@ CodeMirror.defineMIME("text/x-puppet", "puppet");
         return {
           tokenize: tokenBase,
           scopes: [{offset: basecolumn || 0, type: "py", align: null}],
+          indent: basecolumn || 0,
           lastToken: null,
           lambda: false,
           dedent: 0
@@ -27288,16 +27429,14 @@ CodeMirror.defineMIME("text/x-puppet", "puppet");
         if (state.tokenize != tokenBase)
           return state.tokenize.isString ? CodeMirror.Pass : 0;
 
-        var scope = top(state);
-        var closing = textAfter && textAfter.charAt(0) == scope.type;
+        var scope = top(state), closing = scope.type == textAfter.charAt(0)
         if (scope.align != null)
-          return scope.align - (closing ? 1 : 0);
-        else if (closing && state.scopes.length > 1)
-          return state.scopes[state.scopes.length - 2].offset;
+          return scope.align - (closing ? 1 : 0)
         else
-          return scope.offset;
+          return scope.offset - (closing ? hangingIndent : 0)
       },
 
+      electricInput: /^\s*[\}\]\)]$/,
       closeBrackets: {triples: "'\""},
       lineComment: "#",
       fold: "indent"
@@ -28571,7 +28710,7 @@ CodeMirror.defineMode("ruby", function(config) {
         (state.continuedLine ? config.indentUnit : 0);
     },
 
-    electricChars: "}de", // enD and rescuE
+    electricInput: /^\s*(?:end|rescue|\})$/,
     lineComment: "#"
   };
 });
@@ -31074,7 +31213,11 @@ CodeMirror.defineMode("sparql", function(config) {
       else if (curPunc == "{") pushContext(state, "}", stream.column());
       else if (/[\]\}\)]/.test(curPunc)) {
         while (state.context && state.context.type == "pattern") popContext(state);
-        if (state.context && curPunc == state.context.type) popContext(state);
+        if (state.context && curPunc == state.context.type) {
+          popContext(state);
+          if (curPunc == "}" && state.context && state.context.type == "pattern")
+            popContext(state);
+        }
       }
       else if (curPunc == "." && state.context && state.context.type == "pattern") popContext(state);
       else if (/atom|string|variable/.test(style) && state.context) {
@@ -31104,7 +31247,9 @@ CodeMirror.defineMode("sparql", function(config) {
         return context.col + (closing ? 0 : 1);
       else
         return context.indent + (closing ? 0 : indentUnit);
-    }
+    },
+
+    lineComment: "#"
   };
 });
 
@@ -31185,7 +31330,10 @@ CodeMirror.defineMIME("application/sparql-query", "sparql");
           return "operator";
         case "\\":
           if (stream.match(/\\[a-z]+/)) return "string-2";
-          else return null;
+          else {
+            stream.next();
+            return "atom";
+          }
         case ".":
         case ",":
         case ";":
@@ -31483,7 +31631,7 @@ CodeMirror.defineMode("sql", function(config, parserConfig) {
   }
 
   // these keywords are used by all SQL dialects (however, a mode can still overwrite it)
-  var sqlKeywords = "alter and as asc between by count create delete desc distinct drop from group having in insert into is join like not on or order select set table union update values where limit";
+  var sqlKeywords = "alter and as asc between by count create delete desc distinct drop from group having in insert into is join like not on or order select set table union update values where limit ";
 
   // turn a space-separated list into an array
   function set(str) {
@@ -31583,6 +31731,20 @@ CodeMirror.defineMode("sql", function(config, parserConfig) {
     dateSQL: set("date timestamp"),
     support: set("ODBCdotTable doubleQuote binaryNumber hexNumber")
   });
+
+  CodeMirror.defineMIME("text/x-pgsql", {
+    name: "sql",
+    client: set("source"),
+    // http://www.postgresql.org/docs/9.5/static/sql-keywords-appendix.html
+    keywords: set(sqlKeywords + "a abort abs absent absolute access according action ada add admin after aggregate all allocate also always analyse analyze any are array array_agg array_max_cardinality asensitive assertion assignment asymmetric at atomic attribute attributes authorization avg backward base64 before begin begin_frame begin_partition bernoulli binary bit_length blob blocked bom both breadth c cache call called cardinality cascade cascaded case cast catalog catalog_name ceil ceiling chain characteristics characters character_length character_set_catalog character_set_name character_set_schema char_length check checkpoint class class_origin clob close cluster coalesce cobol collate collation collation_catalog collation_name collation_schema collect column columns column_name command_function command_function_code comment comments commit committed concurrently condition condition_number configuration conflict connect connection connection_name constraint constraints constraint_catalog constraint_name constraint_schema constructor contains content continue control conversion convert copy corr corresponding cost covar_pop covar_samp cross csv cube cume_dist current current_catalog current_date current_default_transform_group current_path current_role current_row current_schema current_time current_timestamp current_transform_group_for_type current_user cursor cursor_name cycle data database datalink datetime_interval_code datetime_interval_precision day db deallocate dec declare default defaults deferrable deferred defined definer degree delimiter delimiters dense_rank depth deref derived describe descriptor deterministic diagnostics dictionary disable discard disconnect dispatch dlnewcopy dlpreviouscopy dlurlcomplete dlurlcompleteonly dlurlcompletewrite dlurlpath dlurlpathonly dlurlpathwrite dlurlscheme dlurlserver dlvalue do document domain dynamic dynamic_function dynamic_function_code each element else empty enable encoding encrypted end end-exec end_frame end_partition enforced enum equals escape event every except exception exclude excluding exclusive exec execute exists exp explain expression extension external extract false family fetch file filter final first first_value flag float floor following for force foreign fortran forward found frame_row free freeze fs full function functions fusion g general generated get global go goto grant granted greatest grouping groups handler header hex hierarchy hold hour id identity if ignore ilike immediate immediately immutable implementation implicit import including increment indent index indexes indicator inherit inherits initially inline inner inout input insensitive instance instantiable instead integrity intersect intersection invoker isnull isolation k key key_member key_type label lag language large last last_value lateral lead leading leakproof least left length level library like_regex link listen ln load local localtime localtimestamp location locator lock locked logged lower m map mapping match matched materialized max maxvalue max_cardinality member merge message_length message_octet_length message_text method min minute minvalue mod mode modifies module month more move multiset mumps name names namespace national natural nchar nclob nesting new next nfc nfd nfkc nfkd nil no none normalize normalized nothing notify notnull nowait nth_value ntile null nullable nullif nulls number object occurrences_regex octets octet_length of off offset oids old only open operator option options ordering ordinality others out outer output over overlaps overlay overriding owned owner p pad parameter parameter_mode parameter_name parameter_ordinal_position parameter_specific_catalog parameter_specific_name parameter_specific_schema parser partial partition pascal passing passthrough password percent percentile_cont percentile_disc percent_rank period permission placing plans pli policy portion position position_regex power precedes preceding prepare prepared preserve primary prior privileges procedural procedure program public quote range rank read reads reassign recheck recovery recursive ref references referencing refresh regr_avgx regr_avgy regr_count regr_intercept regr_r2 regr_slope regr_sxx regr_sxy regr_syy reindex relative release rename repeatable replace replica requiring reset respect restart restore restrict result return returned_cardinality returned_length returned_octet_length returned_sqlstate returning returns revoke right role rollback rollup routine routine_catalog routine_name routine_schema row rows row_count row_number rule savepoint scale schema schema_name scope scope_catalog scope_name scope_schema scroll search second section security selective self sensitive sequence sequences serializable server server_name session session_user setof sets share show similar simple size skip snapshot some source space specific specifictype specific_name sql sqlcode sqlerror sqlexception sqlstate sqlwarning sqrt stable standalone start state statement static statistics stddev_pop stddev_samp stdin stdout storage strict strip structure style subclass_origin submultiset substring substring_regex succeeds sum symmetric sysid system system_time system_user t tables tablesample tablespace table_name temp template temporary then ties timezone_hour timezone_minute to token top_level_count trailing transaction transactions_committed transactions_rolled_back transaction_active transform transforms translate translate_regex translation treat trigger trigger_catalog trigger_name trigger_schema trim trim_array true truncate trusted type types uescape unbounded uncommitted under unencrypted unique unknown unlink unlisten unlogged unnamed unnest until untyped upper uri usage user user_defined_type_catalog user_defined_type_code user_defined_type_name user_defined_type_schema using vacuum valid validate validator value value_of varbinary variadic var_pop var_samp verbose version versioning view views volatile when whenever whitespace width_bucket window within work wrapper write xmlagg xmlattributes xmlbinary xmlcast xmlcomment xmlconcat xmldeclaration xmldocument xmlelement xmlexists xmlforest xmliterate xmlnamespaces xmlparse xmlpi xmlquery xmlroot xmlschema xmlserialize xmltable xmltext xmlvalidate year yes loop repeat"),
+    // http://www.postgresql.org/docs/9.5/static/datatype.html
+    builtin: set("bigint int8 bigserial serial8 bit varying varbit boolean bool box bytea character char varchar cidr circle date double precision float8 inet integer int int4 interval json jsonb line lseg macaddr money numeric decimal path pg_lsn point polygon real float4 smallint int2 smallserial serial2 serial serial4 text time without zone with timetz timestamp timestamptz tsquery tsvector txid_snapshot uuid xml"),
+    atoms: set("false true null unknown"),
+    operatorChars: /^[*+\-%<>!=&|^]/,
+    dateSQL: set("date time timestamp"),
+    support: set("ODBCdotTable decimallessFloat zerolessFloat binaryNumber hexNumber nCharCast charsetCast commentHash commentSpaceRequired")
+  });
+
 }());
 
 });
@@ -32677,13 +32839,13 @@ CodeMirror.defineMode("sql", function(config, parserConfig) {
                        "private","extension"])
   var operators = "+-/*%=|&<>#"
   var punc = ";,.(){}[]"
-  var delimiters = /^(?:[()\[\]{},:`=;]|\.\.?\.?)/
   var number = /^-?(?:(?:[\d_]+\.[_\d]*|\.[_\d]+|0o[0-7_\.]+|0b[01_\.]+)(?:e-?[\d_]+)?|0x[\d_a-f\.]+(?:p-?[\d_]+)?)/i
   var identifier = /^[_A-Za-z$][_A-Za-z$0-9]*/
   var property = /^[@\.][_A-Za-z$][_A-Za-z$0-9]*/
   var regexp = /^\/(?!\s)(?:\/\/)?(?:\\.|[^\/])+\//
 
   function tokenBase(stream, state, prev) {
+    if (stream.sol()) state.indented = stream.indentation()
     if (stream.eatSpace()) return null
 
     var ch = stream.peek()
@@ -32703,7 +32865,8 @@ CodeMirror.defineMode("sql", function(config, parserConfig) {
       return "operator"
     }
     if (punc.indexOf(ch) > -1) {
-      stream.match(delimiters)
+      stream.next()
+      stream.match("..")
       return "punctuation"
     }
     if (ch == '"' || ch == "'") {
@@ -32779,14 +32942,35 @@ CodeMirror.defineMode("sql", function(config, parserConfig) {
     return "comment"
   }
 
-  CodeMirror.defineMode("swift", function() {
+  function Context(prev, align, indented) {
+    this.prev = prev
+    this.align = align
+    this.indented = indented
+  }
+
+  function pushContext(state, stream) {
+    var align = stream.match(/^\s*($|\/[\/\*])/, false) ? null : stream.column() + 1
+    state.context = new Context(state.context, align, state.indented)
+  }
+
+  function popContext(state) {
+    if (state.context) {
+      state.indented = state.context.indented
+      state.context = state.context.prev
+    }
+  }
+
+  CodeMirror.defineMode("swift", function(config) {
     return {
       startState: function() {
         return {
           prev: null,
+          context: null,
+          indented: 0,
           tokenize: []
         }
       },
+
       token: function(stream, state) {
         var prev = state.prev
         state.prev = null
@@ -32794,8 +32978,25 @@ CodeMirror.defineMode("sql", function(config, parserConfig) {
         var style = tokenize(stream, state, prev)
         if (!style || style == "comment") state.prev = prev
         else if (!state.prev) state.prev = style
+
+        if (style == "punctuation") {
+          var bracket = /[\(\[\{]|([\]\)\}])/.exec(stream.current())
+          if (bracket) (bracket[1] ? popContext : pushContext)(state, stream)
+        }
+
         return style
       },
+
+      indent: function(state, textAfter) {
+        var cx = state.context
+        if (!cx) return 0
+        var closing = /^[\]\}\)]/.test(textAfter)
+        if (cx.align != null) return cx.align - (closing ? 1 : 0)
+        return cx.indented + (closing ? 0 : config.indentUnit)
+      },
+
+      electricInput: /^\s*[\)\}\]]$/,
+
       lineComment: "//",
       blockCommentStart: "/*",
       blockCommentEnd: "*/"
@@ -36789,54 +36990,56 @@ CodeMirror.defineMIME("text/x-vhdl", "vhdl");
 })(function(CodeMirror) {
 "use strict";
 
-CodeMirror.defineMode("xml", function(config, parserConfig) {
-  var indentUnit = config.indentUnit;
-  var multilineTagIndentFactor = parserConfig.multilineTagIndentFactor || 1;
-  var multilineTagIndentPastTag = parserConfig.multilineTagIndentPastTag;
-  if (multilineTagIndentPastTag == null) multilineTagIndentPastTag = true;
+var htmlConfig = {
+  autoSelfClosers: {'area': true, 'base': true, 'br': true, 'col': true, 'command': true,
+                    'embed': true, 'frame': true, 'hr': true, 'img': true, 'input': true,
+                    'keygen': true, 'link': true, 'meta': true, 'param': true, 'source': true,
+                    'track': true, 'wbr': true, 'menuitem': true},
+  implicitlyClosed: {'dd': true, 'li': true, 'optgroup': true, 'option': true, 'p': true,
+                     'rp': true, 'rt': true, 'tbody': true, 'td': true, 'tfoot': true,
+                     'th': true, 'tr': true},
+  contextGrabbers: {
+    'dd': {'dd': true, 'dt': true},
+    'dt': {'dd': true, 'dt': true},
+    'li': {'li': true},
+    'option': {'option': true, 'optgroup': true},
+    'optgroup': {'optgroup': true},
+    'p': {'address': true, 'article': true, 'aside': true, 'blockquote': true, 'dir': true,
+          'div': true, 'dl': true, 'fieldset': true, 'footer': true, 'form': true,
+          'h1': true, 'h2': true, 'h3': true, 'h4': true, 'h5': true, 'h6': true,
+          'header': true, 'hgroup': true, 'hr': true, 'menu': true, 'nav': true, 'ol': true,
+          'p': true, 'pre': true, 'section': true, 'table': true, 'ul': true},
+    'rp': {'rp': true, 'rt': true},
+    'rt': {'rp': true, 'rt': true},
+    'tbody': {'tbody': true, 'tfoot': true},
+    'td': {'td': true, 'th': true},
+    'tfoot': {'tbody': true},
+    'th': {'td': true, 'th': true},
+    'thead': {'tbody': true, 'tfoot': true},
+    'tr': {'tr': true}
+  },
+  doNotIndent: {"pre": true},
+  allowUnquoted: true,
+  allowMissing: true,
+  caseFold: true
+}
 
-  var Kludges = parserConfig.htmlMode ? {
-    autoSelfClosers: {'area': true, 'base': true, 'br': true, 'col': true, 'command': true,
-                      'embed': true, 'frame': true, 'hr': true, 'img': true, 'input': true,
-                      'keygen': true, 'link': true, 'meta': true, 'param': true, 'source': true,
-                      'track': true, 'wbr': true, 'menuitem': true},
-    implicitlyClosed: {'dd': true, 'li': true, 'optgroup': true, 'option': true, 'p': true,
-                       'rp': true, 'rt': true, 'tbody': true, 'td': true, 'tfoot': true,
-                       'th': true, 'tr': true},
-    contextGrabbers: {
-      'dd': {'dd': true, 'dt': true},
-      'dt': {'dd': true, 'dt': true},
-      'li': {'li': true},
-      'option': {'option': true, 'optgroup': true},
-      'optgroup': {'optgroup': true},
-      'p': {'address': true, 'article': true, 'aside': true, 'blockquote': true, 'dir': true,
-            'div': true, 'dl': true, 'fieldset': true, 'footer': true, 'form': true,
-            'h1': true, 'h2': true, 'h3': true, 'h4': true, 'h5': true, 'h6': true,
-            'header': true, 'hgroup': true, 'hr': true, 'menu': true, 'nav': true, 'ol': true,
-            'p': true, 'pre': true, 'section': true, 'table': true, 'ul': true},
-      'rp': {'rp': true, 'rt': true},
-      'rt': {'rp': true, 'rt': true},
-      'tbody': {'tbody': true, 'tfoot': true},
-      'td': {'td': true, 'th': true},
-      'tfoot': {'tbody': true},
-      'th': {'td': true, 'th': true},
-      'thead': {'tbody': true, 'tfoot': true},
-      'tr': {'tr': true}
-    },
-    doNotIndent: {"pre": true},
-    allowUnquoted: true,
-    allowMissing: true,
-    caseFold: true
-  } : {
-    autoSelfClosers: {},
-    implicitlyClosed: {},
-    contextGrabbers: {},
-    doNotIndent: {},
-    allowUnquoted: false,
-    allowMissing: false,
-    caseFold: false
-  };
-  var alignCDATA = parserConfig.alignCDATA;
+var xmlConfig = {
+  autoSelfClosers: {},
+  implicitlyClosed: {},
+  contextGrabbers: {},
+  doNotIndent: {},
+  allowUnquoted: false,
+  allowMissing: false,
+  caseFold: false
+}
+
+CodeMirror.defineMode("xml", function(editorConf, config_) {
+  var indentUnit = editorConf.indentUnit
+  var config = {}
+  var defaults = config_.htmlMode ? htmlConfig : xmlConfig
+  for (var prop in defaults) config[prop] = defaults[prop]
+  for (var prop in config_) config[prop] = config_[prop]
 
   // Return variables for tokenizers
   var type, setStyle;
@@ -36966,7 +37169,7 @@ CodeMirror.defineMode("xml", function(config, parserConfig) {
     this.tagName = tagName;
     this.indent = state.indented;
     this.startOfLine = startOfLine;
-    if (Kludges.doNotIndent.hasOwnProperty(tagName) || (state.context && state.context.noIndent))
+    if (config.doNotIndent.hasOwnProperty(tagName) || (state.context && state.context.noIndent))
       this.noIndent = true;
   }
   function popContext(state) {
@@ -36979,8 +37182,8 @@ CodeMirror.defineMode("xml", function(config, parserConfig) {
         return;
       }
       parentTagName = state.context.tagName;
-      if (!Kludges.contextGrabbers.hasOwnProperty(parentTagName) ||
-          !Kludges.contextGrabbers[parentTagName].hasOwnProperty(nextTagName)) {
+      if (!config.contextGrabbers.hasOwnProperty(parentTagName) ||
+          !config.contextGrabbers[parentTagName].hasOwnProperty(nextTagName)) {
         return;
       }
       popContext(state);
@@ -37011,9 +37214,9 @@ CodeMirror.defineMode("xml", function(config, parserConfig) {
     if (type == "word") {
       var tagName = stream.current();
       if (state.context && state.context.tagName != tagName &&
-          Kludges.implicitlyClosed.hasOwnProperty(state.context.tagName))
+          config.implicitlyClosed.hasOwnProperty(state.context.tagName))
         popContext(state);
-      if (state.context && state.context.tagName == tagName) {
+      if ((state.context && state.context.tagName == tagName) || config.matchClosing === false) {
         setStyle = "tag";
         return closeState;
       } else {
@@ -37047,7 +37250,7 @@ CodeMirror.defineMode("xml", function(config, parserConfig) {
       var tagName = state.tagName, tagStart = state.tagStart;
       state.tagName = state.tagStart = null;
       if (type == "selfcloseTag" ||
-          Kludges.autoSelfClosers.hasOwnProperty(tagName)) {
+          config.autoSelfClosers.hasOwnProperty(tagName)) {
         maybePopContext(state, tagName);
       } else {
         maybePopContext(state, tagName);
@@ -37060,12 +37263,12 @@ CodeMirror.defineMode("xml", function(config, parserConfig) {
   }
   function attrEqState(type, stream, state) {
     if (type == "equals") return attrValueState;
-    if (!Kludges.allowMissing) setStyle = "error";
+    if (!config.allowMissing) setStyle = "error";
     return attrState(type, stream, state);
   }
   function attrValueState(type, stream, state) {
     if (type == "string") return attrContinuedState;
-    if (type == "word" && Kludges.allowUnquoted) {setStyle = "string"; return attrState;}
+    if (type == "word" && config.allowUnquoted) {setStyle = "string"; return attrState;}
     setStyle = "error";
     return attrState(type, stream, state);
   }
@@ -37075,12 +37278,14 @@ CodeMirror.defineMode("xml", function(config, parserConfig) {
   }
 
   return {
-    startState: function() {
-      return {tokenize: inText,
-              state: baseState,
-              indented: 0,
-              tagName: null, tagStart: null,
-              context: null};
+    startState: function(baseIndent) {
+      var state = {tokenize: inText,
+                   state: baseState,
+                   indented: baseIndent || 0,
+                   tagName: null, tagStart: null,
+                   context: null}
+      if (baseIndent != null) state.baseIndent = baseIndent
+      return state
     },
 
     token: function(stream, state) {
@@ -37113,19 +37318,19 @@ CodeMirror.defineMode("xml", function(config, parserConfig) {
         return fullLine ? fullLine.match(/^(\s*)/)[0].length : 0;
       // Indent the starts of attribute names.
       if (state.tagName) {
-        if (multilineTagIndentPastTag)
+        if (config.multilineTagIndentPastTag !== false)
           return state.tagStart + state.tagName.length + 2;
         else
-          return state.tagStart + indentUnit * multilineTagIndentFactor;
+          return state.tagStart + indentUnit * (config.multilineTagIndentFactor || 1);
       }
-      if (alignCDATA && /<!\[CDATA\[/.test(textAfter)) return 0;
+      if (config.alignCDATA && /<!\[CDATA\[/.test(textAfter)) return 0;
       var tagAfter = textAfter && /^<(\/)?([\w_:\.-]*)/.exec(textAfter);
       if (tagAfter && tagAfter[1]) { // Closing tag spotted
         while (context) {
           if (context.tagName == tagAfter[2]) {
             context = context.prev;
             break;
-          } else if (Kludges.implicitlyClosed.hasOwnProperty(context.tagName)) {
+          } else if (config.implicitlyClosed.hasOwnProperty(context.tagName)) {
             context = context.prev;
           } else {
             break;
@@ -37133,25 +37338,30 @@ CodeMirror.defineMode("xml", function(config, parserConfig) {
         }
       } else if (tagAfter) { // Opening tag spotted
         while (context) {
-          var grabbers = Kludges.contextGrabbers[context.tagName];
+          var grabbers = config.contextGrabbers[context.tagName];
           if (grabbers && grabbers.hasOwnProperty(tagAfter[2]))
             context = context.prev;
           else
             break;
         }
       }
-      while (context && !context.startOfLine)
+      while (context && context.prev && !context.startOfLine)
         context = context.prev;
       if (context) return context.indent + indentUnit;
-      else return 0;
+      else return state.baseIndent || 0;
     },
 
     electricInput: /<\/[\s\w:]+>$/,
     blockCommentStart: "<!--",
     blockCommentEnd: "-->",
 
-    configuration: parserConfig.htmlMode ? "html" : "xml",
-    helperType: parserConfig.htmlMode ? "html" : "xml"
+    configuration: config.htmlMode ? "html" : "xml",
+    helperType: config.htmlMode ? "html" : "xml",
+
+    skipAttribute: function(state) {
+      if (state.state == attrValueState)
+        state.state = attrState
+    }
   };
 });
 
@@ -37839,6 +38049,252 @@ CodeMirror.defineMIME("text/x-ez80", { name: "z80", ez80: true });
 });
 
 },{"../../lib/codemirror":11}],122:[function(require,module,exports){
+(function() {
+  var CompositeDisposable;
+
+  module.exports = CompositeDisposable = (function() {
+    CompositeDisposable.prototype.disposed = false;
+
+
+    /*
+    Section: Construction and Destruction
+     */
+
+    function CompositeDisposable() {
+      var disposable, _i, _len;
+      this.disposables = new Set;
+      for (_i = 0, _len = arguments.length; _i < _len; _i++) {
+        disposable = arguments[_i];
+        this.add(disposable);
+      }
+    }
+
+    CompositeDisposable.prototype.dispose = function() {
+      if (!this.disposed) {
+        this.disposed = true;
+        this.disposables.forEach(function(disposable) {
+          return disposable.dispose();
+        });
+        this.disposables = null;
+      }
+    };
+
+
+    /*
+    Section: Managing Disposables
+     */
+
+    CompositeDisposable.prototype.add = function() {
+      var disposable, _i, _len;
+      if (!this.disposed) {
+        for (_i = 0, _len = arguments.length; _i < _len; _i++) {
+          disposable = arguments[_i];
+          this.disposables.add(disposable);
+        }
+      }
+    };
+
+    CompositeDisposable.prototype.remove = function(disposable) {
+      if (!this.disposed) {
+        this.disposables["delete"](disposable);
+      }
+    };
+
+    CompositeDisposable.prototype.clear = function() {
+      if (!this.disposed) {
+        this.disposables.clear();
+      }
+    };
+
+    return CompositeDisposable;
+
+  })();
+
+}).call(this);
+
+},{}],123:[function(require,module,exports){
+(function() {
+  var Disposable;
+
+  module.exports = Disposable = (function() {
+    Disposable.prototype.disposed = false;
+
+    Disposable.isDisposable = function(object) {
+      return typeof (object != null ? object.dispose : void 0) === "function";
+    };
+
+
+    /*
+    Section: Construction and Destruction
+     */
+
+    function Disposable(disposalAction) {
+      this.disposalAction = disposalAction;
+    }
+
+    Disposable.prototype.dispose = function() {
+      if (!this.disposed) {
+        this.disposed = true;
+        if (typeof this.disposalAction === "function") {
+          this.disposalAction();
+        }
+        this.disposalAction = null;
+      }
+    };
+
+    return Disposable;
+
+  })();
+
+}).call(this);
+
+},{}],124:[function(require,module,exports){
+(function() {
+  var Disposable, Emitter;
+
+  Disposable = require('./disposable');
+
+  module.exports = Emitter = (function() {
+    Emitter.exceptionHandlers = [];
+
+    Emitter.onEventHandlerException = function(exceptionHandler) {
+      if (this.exceptionHandlers.length === 0) {
+        this.dispatch = this.exceptionHandlingDispatch;
+      }
+      this.exceptionHandlers.push(exceptionHandler);
+      return new Disposable((function(_this) {
+        return function() {
+          _this.exceptionHandlers.splice(_this.exceptionHandlers.indexOf(exceptionHandler), 1);
+          if (_this.exceptionHandlers.length === 0) {
+            return _this.dispatch = _this.simpleDispatch;
+          }
+        };
+      })(this));
+    };
+
+    Emitter.simpleDispatch = function(handler, value) {
+      return handler(value);
+    };
+
+    Emitter.exceptionHandlingDispatch = function(handler, value) {
+      var exception, exceptionHandler, _i, _len, _ref, _results;
+      try {
+        return handler(value);
+      } catch (_error) {
+        exception = _error;
+        _ref = this.exceptionHandlers;
+        _results = [];
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          exceptionHandler = _ref[_i];
+          _results.push(exceptionHandler(exception));
+        }
+        return _results;
+      }
+    };
+
+    Emitter.dispatch = Emitter.simpleDispatch;
+
+    Emitter.prototype.disposed = false;
+
+
+    /*
+    Section: Construction and Destruction
+     */
+
+    function Emitter() {
+      this.clear();
+    }
+
+    Emitter.prototype.clear = function() {
+      return this.handlersByEventName = {};
+    };
+
+    Emitter.prototype.dispose = function() {
+      this.handlersByEventName = null;
+      return this.disposed = true;
+    };
+
+
+    /*
+    Section: Event Subscription
+     */
+
+    Emitter.prototype.on = function(eventName, handler, unshift) {
+      var currentHandlers;
+      if (unshift == null) {
+        unshift = false;
+      }
+      if (this.disposed) {
+        throw new Error("Emitter has been disposed");
+      }
+      if (typeof handler !== 'function') {
+        throw new Error("Handler must be a function");
+      }
+      if (currentHandlers = this.handlersByEventName[eventName]) {
+        if (unshift) {
+          this.handlersByEventName[eventName] = [handler].concat(currentHandlers);
+        } else {
+          this.handlersByEventName[eventName] = currentHandlers.concat(handler);
+        }
+      } else {
+        this.handlersByEventName[eventName] = [handler];
+      }
+      return new Disposable(this.off.bind(this, eventName, handler));
+    };
+
+    Emitter.prototype.preempt = function(eventName, handler) {
+      return this.on(eventName, handler, true);
+    };
+
+    Emitter.prototype.off = function(eventName, handlerToRemove) {
+      var handler, newHandlers, oldHandlers, _i, _len;
+      if (this.disposed) {
+        return;
+      }
+      if (oldHandlers = this.handlersByEventName[eventName]) {
+        newHandlers = [];
+        for (_i = 0, _len = oldHandlers.length; _i < _len; _i++) {
+          handler = oldHandlers[_i];
+          if (handler !== handlerToRemove) {
+            newHandlers.push(handler);
+          }
+        }
+        this.handlersByEventName[eventName] = newHandlers;
+      }
+    };
+
+
+    /*
+    Section: Event Emission
+     */
+
+    Emitter.prototype.emit = function(eventName, value) {
+      var handler, handlers, _i, _len, _ref;
+      if (handlers = (_ref = this.handlersByEventName) != null ? _ref[eventName] : void 0) {
+        for (_i = 0, _len = handlers.length; _i < _len; _i++) {
+          handler = handlers[_i];
+          this.constructor.dispatch(handler, value);
+        }
+      }
+    };
+
+    return Emitter;
+
+  })();
+
+}).call(this);
+
+},{"./disposable":123}],125:[function(require,module,exports){
+(function() {
+  exports.Emitter = require('./emitter');
+
+  exports.Disposable = require('./disposable');
+
+  exports.CompositeDisposable = require('./composite-disposable');
+
+}).call(this);
+
+},{"./composite-disposable":122,"./disposable":123,"./emitter":124}],126:[function(require,module,exports){
 /*
 Syntax highlighting with language autodetection.
 https://highlightjs.org/
@@ -38611,7 +39067,7 @@ https://highlightjs.org/
   return hljs;
 }));
 
-},{}],123:[function(require,module,exports){
+},{}],127:[function(require,module,exports){
 var hljs = require('./highlight');
 
 hljs.registerLanguage('1c', require('./languages/1c'));
@@ -38753,7 +39209,7 @@ hljs.registerLanguage('xquery', require('./languages/xquery'));
 hljs.registerLanguage('zephir', require('./languages/zephir'));
 
 module.exports = hljs;
-},{"./highlight":122,"./languages/1c":124,"./languages/accesslog":125,"./languages/actionscript":126,"./languages/apache":127,"./languages/applescript":128,"./languages/armasm":129,"./languages/asciidoc":130,"./languages/aspectj":131,"./languages/autohotkey":132,"./languages/autoit":133,"./languages/avrasm":134,"./languages/axapta":135,"./languages/bash":136,"./languages/brainfuck":137,"./languages/cal":138,"./languages/capnproto":139,"./languages/ceylon":140,"./languages/clojure":142,"./languages/clojure-repl":141,"./languages/cmake":143,"./languages/coffeescript":144,"./languages/cpp":145,"./languages/crmsh":146,"./languages/crystal":147,"./languages/cs":148,"./languages/css":149,"./languages/d":150,"./languages/dart":151,"./languages/delphi":152,"./languages/diff":153,"./languages/django":154,"./languages/dns":155,"./languages/dockerfile":156,"./languages/dos":157,"./languages/dust":158,"./languages/elixir":159,"./languages/elm":160,"./languages/erb":161,"./languages/erlang":163,"./languages/erlang-repl":162,"./languages/fix":164,"./languages/fortran":165,"./languages/fsharp":166,"./languages/gams":167,"./languages/gcode":168,"./languages/gherkin":169,"./languages/glsl":170,"./languages/go":171,"./languages/golo":172,"./languages/gradle":173,"./languages/groovy":174,"./languages/haml":175,"./languages/handlebars":176,"./languages/haskell":177,"./languages/haxe":178,"./languages/http":179,"./languages/inform7":180,"./languages/ini":181,"./languages/irpf90":182,"./languages/java":183,"./languages/javascript":184,"./languages/json":185,"./languages/julia":186,"./languages/kotlin":187,"./languages/lasso":188,"./languages/less":189,"./languages/lisp":190,"./languages/livecodeserver":191,"./languages/livescript":192,"./languages/lua":193,"./languages/makefile":194,"./languages/markdown":195,"./languages/mathematica":196,"./languages/matlab":197,"./languages/mel":198,"./languages/mercury":199,"./languages/mizar":200,"./languages/mojolicious":201,"./languages/monkey":202,"./languages/nginx":203,"./languages/nimrod":204,"./languages/nix":205,"./languages/nsis":206,"./languages/objectivec":207,"./languages/ocaml":208,"./languages/openscad":209,"./languages/oxygene":210,"./languages/parser3":211,"./languages/perl":212,"./languages/pf":213,"./languages/php":214,"./languages/powershell":215,"./languages/processing":216,"./languages/profile":217,"./languages/prolog":218,"./languages/protobuf":219,"./languages/puppet":220,"./languages/python":221,"./languages/q":222,"./languages/r":223,"./languages/rib":224,"./languages/roboconf":225,"./languages/rsl":226,"./languages/ruby":227,"./languages/ruleslanguage":228,"./languages/rust":229,"./languages/scala":230,"./languages/scheme":231,"./languages/scilab":232,"./languages/scss":233,"./languages/smali":234,"./languages/smalltalk":235,"./languages/sml":236,"./languages/sqf":237,"./languages/sql":238,"./languages/stata":239,"./languages/step21":240,"./languages/stylus":241,"./languages/swift":242,"./languages/tcl":243,"./languages/tex":244,"./languages/thrift":245,"./languages/tp":246,"./languages/twig":247,"./languages/typescript":248,"./languages/vala":249,"./languages/vbnet":250,"./languages/vbscript":252,"./languages/vbscript-html":251,"./languages/verilog":253,"./languages/vhdl":254,"./languages/vim":255,"./languages/x86asm":256,"./languages/xl":257,"./languages/xml":258,"./languages/xquery":259,"./languages/zephir":260}],124:[function(require,module,exports){
+},{"./highlight":126,"./languages/1c":128,"./languages/accesslog":129,"./languages/actionscript":130,"./languages/apache":131,"./languages/applescript":132,"./languages/armasm":133,"./languages/asciidoc":134,"./languages/aspectj":135,"./languages/autohotkey":136,"./languages/autoit":137,"./languages/avrasm":138,"./languages/axapta":139,"./languages/bash":140,"./languages/brainfuck":141,"./languages/cal":142,"./languages/capnproto":143,"./languages/ceylon":144,"./languages/clojure":146,"./languages/clojure-repl":145,"./languages/cmake":147,"./languages/coffeescript":148,"./languages/cpp":149,"./languages/crmsh":150,"./languages/crystal":151,"./languages/cs":152,"./languages/css":153,"./languages/d":154,"./languages/dart":155,"./languages/delphi":156,"./languages/diff":157,"./languages/django":158,"./languages/dns":159,"./languages/dockerfile":160,"./languages/dos":161,"./languages/dust":162,"./languages/elixir":163,"./languages/elm":164,"./languages/erb":165,"./languages/erlang":167,"./languages/erlang-repl":166,"./languages/fix":168,"./languages/fortran":169,"./languages/fsharp":170,"./languages/gams":171,"./languages/gcode":172,"./languages/gherkin":173,"./languages/glsl":174,"./languages/go":175,"./languages/golo":176,"./languages/gradle":177,"./languages/groovy":178,"./languages/haml":179,"./languages/handlebars":180,"./languages/haskell":181,"./languages/haxe":182,"./languages/http":183,"./languages/inform7":184,"./languages/ini":185,"./languages/irpf90":186,"./languages/java":187,"./languages/javascript":188,"./languages/json":189,"./languages/julia":190,"./languages/kotlin":191,"./languages/lasso":192,"./languages/less":193,"./languages/lisp":194,"./languages/livecodeserver":195,"./languages/livescript":196,"./languages/lua":197,"./languages/makefile":198,"./languages/markdown":199,"./languages/mathematica":200,"./languages/matlab":201,"./languages/mel":202,"./languages/mercury":203,"./languages/mizar":204,"./languages/mojolicious":205,"./languages/monkey":206,"./languages/nginx":207,"./languages/nimrod":208,"./languages/nix":209,"./languages/nsis":210,"./languages/objectivec":211,"./languages/ocaml":212,"./languages/openscad":213,"./languages/oxygene":214,"./languages/parser3":215,"./languages/perl":216,"./languages/pf":217,"./languages/php":218,"./languages/powershell":219,"./languages/processing":220,"./languages/profile":221,"./languages/prolog":222,"./languages/protobuf":223,"./languages/puppet":224,"./languages/python":225,"./languages/q":226,"./languages/r":227,"./languages/rib":228,"./languages/roboconf":229,"./languages/rsl":230,"./languages/ruby":231,"./languages/ruleslanguage":232,"./languages/rust":233,"./languages/scala":234,"./languages/scheme":235,"./languages/scilab":236,"./languages/scss":237,"./languages/smali":238,"./languages/smalltalk":239,"./languages/sml":240,"./languages/sqf":241,"./languages/sql":242,"./languages/stata":243,"./languages/step21":244,"./languages/stylus":245,"./languages/swift":246,"./languages/tcl":247,"./languages/tex":248,"./languages/thrift":249,"./languages/tp":250,"./languages/twig":251,"./languages/typescript":252,"./languages/vala":253,"./languages/vbnet":254,"./languages/vbscript":256,"./languages/vbscript-html":255,"./languages/verilog":257,"./languages/vhdl":258,"./languages/vim":259,"./languages/x86asm":260,"./languages/xl":261,"./languages/xml":262,"./languages/xquery":263,"./languages/zephir":264}],128:[function(require,module,exports){
 module.exports = function(hljs){
   var IDENT_RE_RU = '[a-zA-Zа-яА-Я][a-zA-Z0-9_а-яА-Я]*';
   var OneS_KEYWORDS = 'возврат дата для если и или иначе иначеесли исключение конецесли ' +
@@ -38839,7 +39295,7 @@ module.exports = function(hljs){
     ]
   };
 };
-},{}],125:[function(require,module,exports){
+},{}],129:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     contains: [
@@ -38877,7 +39333,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],126:[function(require,module,exports){
+},{}],130:[function(require,module,exports){
 module.exports = function(hljs) {
   var IDENT_RE = '[a-zA-Z_$][a-zA-Z0-9_$]*';
   var IDENT_FUNC_RETURN_TYPE_RE = '([*]|[a-zA-Z_$][a-zA-Z0-9_$]*)';
@@ -38952,7 +39408,7 @@ module.exports = function(hljs) {
     illegal: /#/
   };
 };
-},{}],127:[function(require,module,exports){
+},{}],131:[function(require,module,exports){
 module.exports = function(hljs) {
   var NUMBER = {className: 'number', begin: '[\\$%]\\d+'};
   return {
@@ -38998,7 +39454,7 @@ module.exports = function(hljs) {
     illegal: /\S/
   };
 };
-},{}],128:[function(require,module,exports){
+},{}],132:[function(require,module,exports){
 module.exports = function(hljs) {
   var STRING = hljs.inherit(hljs.QUOTE_STRING_MODE, {illegal: ''});
   var PARAMS = {
@@ -39095,7 +39551,7 @@ module.exports = function(hljs) {
     illegal: '//|->|=>|\\[\\['
   };
 };
-},{}],129:[function(require,module,exports){
+},{}],133:[function(require,module,exports){
 module.exports = function(hljs) {
     //local labels: %?[FB]?[AT]?\d{1,2}\w+
   return {
@@ -39187,7 +39643,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],130:[function(require,module,exports){
+},{}],134:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['adoc'],
@@ -39379,7 +39835,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],131:[function(require,module,exports){
+},{}],135:[function(require,module,exports){
 module.exports = function (hljs) {
   var KEYWORDS =
     'false synchronized int abstract float private char boolean static null if const ' +
@@ -39517,7 +39973,7 @@ module.exports = function (hljs) {
     ]
   };
 };
-},{}],132:[function(require,module,exports){
+},{}],136:[function(require,module,exports){
 module.exports = function(hljs) {
   var BACKTICK_ESCAPE = {
     className: 'escape',
@@ -39579,7 +40035,7 @@ module.exports = function(hljs) {
     ])
   }
 };
-},{}],133:[function(require,module,exports){
+},{}],137:[function(require,module,exports){
 module.exports = function(hljs) {
     var KEYWORDS = 'ByRef Case Const ContinueCase ContinueLoop ' +
         'Default Dim Do Else ElseIf EndFunc EndIf EndSelect ' +
@@ -41334,7 +41790,7 @@ module.exports = function(hljs) {
         ]
     }
 };
-},{}],134:[function(require,module,exports){
+},{}],138:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     case_insensitive: true,
@@ -41396,7 +41852,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],135:[function(require,module,exports){
+},{}],139:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     keywords: 'false int abstract private char boolean static null if for true ' +
@@ -41427,7 +41883,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],136:[function(require,module,exports){
+},{}],140:[function(require,module,exports){
 module.exports = function(hljs) {
   var VAR = {
     className: 'variable',
@@ -41503,7 +41959,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],137:[function(require,module,exports){
+},{}],141:[function(require,module,exports){
 module.exports = function(hljs){
   var LITERAL = {
     className: 'literal',
@@ -41540,7 +41996,7 @@ module.exports = function(hljs){
     ]
   };
 };
-},{}],138:[function(require,module,exports){
+},{}],142:[function(require,module,exports){
 module.exports = function(hljs) {
   var KEYWORDS =
     'div mod in and or not xor asserterror begin case do downto else end exit for if of repeat then to ' +
@@ -41620,7 +42076,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],139:[function(require,module,exports){
+},{}],143:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['capnp'],
@@ -41669,7 +42125,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],140:[function(require,module,exports){
+},{}],144:[function(require,module,exports){
 module.exports = function(hljs) {
   // 2.3. Identifiers and keywords
   var KEYWORDS =
@@ -41737,7 +42193,7 @@ module.exports = function(hljs) {
     ].concat(EXPRESSIONS)
   };
 };
-},{}],141:[function(require,module,exports){
+},{}],145:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     contains: [
@@ -41752,7 +42208,7 @@ module.exports = function(hljs) {
     ]
   }
 };
-},{}],142:[function(require,module,exports){
+},{}],146:[function(require,module,exports){
 module.exports = function(hljs) {
   var keywords = {
     built_in:
@@ -41849,7 +42305,7 @@ module.exports = function(hljs) {
     contains: [LIST, STRING, HINT, HINT_COL, COMMENT, KEY, COLLECTION, NUMBER, LITERAL]
   }
 };
-},{}],143:[function(require,module,exports){
+},{}],147:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['cmake.in'],
@@ -41888,7 +42344,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],144:[function(require,module,exports){
+},{}],148:[function(require,module,exports){
 module.exports = function(hljs) {
   var KEYWORDS = {
     keyword:
@@ -42029,7 +42485,7 @@ module.exports = function(hljs) {
     ])
   };
 };
-},{}],145:[function(require,module,exports){
+},{}],149:[function(require,module,exports){
 module.exports = function(hljs) {
   var CPP_PRIMATIVE_TYPES = {
     className: 'keyword',
@@ -42170,7 +42626,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],146:[function(require,module,exports){
+},{}],150:[function(require,module,exports){
 module.exports = function(hljs) {
   var RESOURCES = 'primitive rsc_template';
 
@@ -42268,7 +42724,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],147:[function(require,module,exports){
+},{}],151:[function(require,module,exports){
 module.exports = function(hljs) {
   var NUM_SUFFIX = '(_[uif](8|16|32|64))?';
   var CRYSTAL_IDENT_RE = '[a-zA-Z_]\\w*[!?=]?';
@@ -42460,7 +42916,7 @@ module.exports = function(hljs) {
     contains: CRYSTAL_DEFAULT_CONTAINS
   };
 };
-},{}],148:[function(require,module,exports){
+},{}],152:[function(require,module,exports){
 module.exports = function(hljs) {
   var KEYWORDS =
     // Normal keywords.
@@ -42579,7 +43035,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],149:[function(require,module,exports){
+},{}],153:[function(require,module,exports){
 module.exports = function(hljs) {
   var IDENT_RE = '[a-zA-Z-][a-zA-Z0-9_-]*';
   var FUNCTION = {
@@ -42681,7 +43137,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],150:[function(require,module,exports){
+},{}],154:[function(require,module,exports){
 module.exports = /**
  * Known issues:
  *
@@ -42939,7 +43395,7 @@ function(hljs) {
     ]
   };
 };
-},{}],151:[function(require,module,exports){
+},{}],155:[function(require,module,exports){
 module.exports = function (hljs) {
   var SUBST = {
     className: 'subst',
@@ -43040,7 +43496,7 @@ module.exports = function (hljs) {
     ]
   }
 };
-},{}],152:[function(require,module,exports){
+},{}],156:[function(require,module,exports){
 module.exports = function(hljs) {
   var KEYWORDS =
     'exports register file shl array record property for mod while set ally label uses raise not ' +
@@ -43107,7 +43563,7 @@ module.exports = function(hljs) {
     ].concat(COMMENT_MODES)
   };
 };
-},{}],153:[function(require,module,exports){
+},{}],157:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['patch'],
@@ -43147,7 +43603,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],154:[function(require,module,exports){
+},{}],158:[function(require,module,exports){
 module.exports = function(hljs) {
   var FILTER = {
     className: 'filter',
@@ -43197,7 +43653,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],155:[function(require,module,exports){
+},{}],159:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['bind', 'zone'],
@@ -43225,7 +43681,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],156:[function(require,module,exports){
+},{}],160:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['docker'],
@@ -43260,7 +43716,7 @@ module.exports = function(hljs) {
     ]
   }
 };
-},{}],157:[function(require,module,exports){
+},{}],161:[function(require,module,exports){
 module.exports = function(hljs) {
   var COMMENT = hljs.COMMENT(
     /@?rem\b/, /$/,
@@ -43309,7 +43765,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],158:[function(require,module,exports){
+},{}],162:[function(require,module,exports){
 module.exports = function(hljs) {
   var EXPRESSION_KEYWORDS = 'if eq ne lt lte gt gte select default math sep';
   return {
@@ -43344,7 +43800,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],159:[function(require,module,exports){
+},{}],163:[function(require,module,exports){
 module.exports = function(hljs) {
   var ELIXIR_IDENT_RE = '[a-zA-Z_][a-zA-Z0-9_]*(\\!|\\?)?';
   var ELIXIR_METHOD_RE = '[a-zA-Z_]\\w*[!?=]?|[-+~]\\@|<<|>>|=~|===?|<=>|[<>]=?|\\*\\*|[-/+%^&*~`|]|\\[\\]=?';
@@ -43446,7 +43902,7 @@ module.exports = function(hljs) {
     contains: ELIXIR_DEFAULT_CONTAINS
   };
 };
-},{}],160:[function(require,module,exports){
+},{}],164:[function(require,module,exports){
 module.exports = function(hljs) {
   var COMMENT_MODES = [
     hljs.COMMENT('--', '$'),
@@ -43532,7 +43988,7 @@ module.exports = function(hljs) {
     ].concat(COMMENT_MODES)
   };
 };
-},{}],161:[function(require,module,exports){
+},{}],165:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     subLanguage: 'xml',
@@ -43547,7 +44003,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],162:[function(require,module,exports){
+},{}],166:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     keywords: {
@@ -43595,7 +44051,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],163:[function(require,module,exports){
+},{}],167:[function(require,module,exports){
 module.exports = function(hljs) {
   var BASIC_ATOM_RE = '[a-z\'][a-zA-Z0-9_\']*';
   var FUNCTION_NAME_RE = '(' + BASIC_ATOM_RE + ':' + BASIC_ATOM_RE + '|' + BASIC_ATOM_RE + ')';
@@ -43747,7 +44203,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],164:[function(require,module,exports){
+},{}],168:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     contains: [
@@ -43776,7 +44232,7 @@ module.exports = function(hljs) {
     case_insensitive: true
   };
 };
-},{}],165:[function(require,module,exports){
+},{}],169:[function(require,module,exports){
 module.exports = function(hljs) {
   var PARAMS = {
     className: 'params',
@@ -43847,7 +44303,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],166:[function(require,module,exports){
+},{}],170:[function(require,module,exports){
 module.exports = function(hljs) {
   var TYPEPARAM = {
     begin: '<', end: '>',
@@ -43906,7 +44362,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],167:[function(require,module,exports){
+},{}],171:[function(require,module,exports){
 module.exports = function (hljs) {
   var KEYWORDS =
     'abort acronym acronyms alias all and assign binary card diag display else1 eps eq equation equations file files ' +
@@ -43943,7 +44399,7 @@ module.exports = function (hljs) {
     ]
   };
 };
-},{}],168:[function(require,module,exports){
+},{}],172:[function(require,module,exports){
 module.exports = function(hljs) {
     var GCODE_IDENT_RE = '[A-Z_][A-Z0-9_.]*';
     var GCODE_CLOSE_RE = '\\%';
@@ -44016,7 +44472,7 @@ module.exports = function(hljs) {
         ].concat(GCODE_CODE)
     };
 };
-},{}],169:[function(require,module,exports){
+},{}],173:[function(require,module,exports){
 module.exports = function (hljs) {
   return {
     aliases: ['feature'],
@@ -44049,7 +44505,7 @@ module.exports = function (hljs) {
     ]
   };
 };
-},{}],170:[function(require,module,exports){
+},{}],174:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     keywords: {
@@ -44143,7 +44599,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],171:[function(require,module,exports){
+},{}],175:[function(require,module,exports){
 module.exports = function(hljs) {
   var GO_KEYWORDS = {
     keyword:
@@ -44182,7 +44638,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],172:[function(require,module,exports){
+},{}],176:[function(require,module,exports){
 module.exports = function(hljs) {
     return {
       keywords: {
@@ -44206,7 +44662,7 @@ module.exports = function(hljs) {
       ]
     }
 };
-},{}],173:[function(require,module,exports){
+},{}],177:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     case_insensitive: true,
@@ -44241,7 +44697,7 @@ module.exports = function(hljs) {
     ]
   }
 };
-},{}],174:[function(require,module,exports){
+},{}],178:[function(require,module,exports){
 module.exports = function(hljs) {
     return {
         keywords: {
@@ -44329,7 +44785,7 @@ module.exports = function(hljs) {
         illegal: /#/
     }
 };
-},{}],175:[function(require,module,exports){
+},{}],179:[function(require,module,exports){
 module.exports = // TODO support filter tags like :javascript, support inline HTML
 function(hljs) {
   return {
@@ -44437,7 +44893,7 @@ function(hljs) {
     ]
   };
 };
-},{}],176:[function(require,module,exports){
+},{}],180:[function(require,module,exports){
 module.exports = function(hljs) {
   var EXPRESSION_KEYWORDS = 'each in with if else unless bindattr action collection debugger log outlet template unbound view yield';
   return {
@@ -44470,7 +44926,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],177:[function(require,module,exports){
+},{}],181:[function(require,module,exports){
 module.exports = function(hljs) {
   var COMMENT_MODES = [
     hljs.COMMENT('--', '$'),
@@ -44594,7 +45050,7 @@ module.exports = function(hljs) {
     ].concat(COMMENT_MODES)
   };
 };
-},{}],178:[function(require,module,exports){
+},{}],182:[function(require,module,exports){
 module.exports = function(hljs) {
   var IDENT_RE = '[a-zA-Z_$][a-zA-Z0-9_$]*';
   var IDENT_FUNC_RETURN_TYPE_RE = '([*]|[a-zA-Z_$][a-zA-Z0-9_$]*)';
@@ -44655,7 +45111,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],179:[function(require,module,exports){
+},{}],183:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['https'],
@@ -44690,7 +45146,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],180:[function(require,module,exports){
+},{}],184:[function(require,module,exports){
 module.exports = function(hljs) {
   var START_BRACKET = '\\[';
   var END_BRACKET = '\\]';
@@ -44748,7 +45204,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],181:[function(require,module,exports){
+},{}],185:[function(require,module,exports){
 module.exports = function(hljs) {
   var STRING = {
     className: "string",
@@ -44808,7 +45264,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],182:[function(require,module,exports){
+},{}],186:[function(require,module,exports){
 module.exports = function(hljs) {
   var PARAMS = {
     className: 'params',
@@ -44884,7 +45340,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],183:[function(require,module,exports){
+},{}],187:[function(require,module,exports){
 module.exports = function(hljs) {
   var GENERIC_IDENT_RE = hljs.UNDERSCORE_IDENT_RE + '(<' + hljs.UNDERSCORE_IDENT_RE + '>)?';
   var KEYWORDS =
@@ -44984,7 +45440,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],184:[function(require,module,exports){
+},{}],188:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['js'],
@@ -45096,7 +45552,7 @@ module.exports = function(hljs) {
     illegal: /#/
   };
 };
-},{}],185:[function(require,module,exports){
+},{}],189:[function(require,module,exports){
 module.exports = function(hljs) {
   var LITERALS = {literal: 'true false null'};
   var TYPES = [
@@ -45134,7 +45590,7 @@ module.exports = function(hljs) {
     illegal: '\\S'
   };
 };
-},{}],186:[function(require,module,exports){
+},{}],190:[function(require,module,exports){
 module.exports = function(hljs) {
   // Since there are numerous special names in Julia, it is too much trouble
   // to maintain them by hand. Hence these names (i.e. keywords, literals and
@@ -45295,7 +45751,7 @@ module.exports = function(hljs) {
 
   return DEFAULT;
 };
-},{}],187:[function(require,module,exports){
+},{}],191:[function(require,module,exports){
 module.exports = function (hljs) {
   var KEYWORDS = 'val var get set class trait object public open private protected ' +
     'final enum if else do while for when break continue throw try catch finally ' +
@@ -45396,7 +45852,7 @@ module.exports = function (hljs) {
     ]
   };
 };
-},{}],188:[function(require,module,exports){
+},{}],192:[function(require,module,exports){
 module.exports = function(hljs) {
   var LASSO_IDENT_RE = '[a-zA-Z_][a-zA-Z0-9_.]*';
   var LASSO_ANGLE_RE = '<\\?(lasso(script)?|=)';
@@ -45582,7 +46038,7 @@ module.exports = function(hljs) {
     ].concat(LASSO_CODE)
   };
 };
-},{}],189:[function(require,module,exports){
+},{}],193:[function(require,module,exports){
 module.exports = function(hljs) {
   var IDENT_RE        = '[\\w-]+'; // yes, Less identifiers may begin with a digit
   var INTERP_IDENT_RE = '(' + IDENT_RE + '|@{' + IDENT_RE + '})';
@@ -45719,7 +46175,7 @@ module.exports = function(hljs) {
     contains: RULES
   };
 };
-},{}],190:[function(require,module,exports){
+},{}],194:[function(require,module,exports){
 module.exports = function(hljs) {
   var LISP_IDENT_RE = '[a-zA-Z_\\-\\+\\*\\/\\<\\=\\>\\&\\#][a-zA-Z0-9_\\-\\+\\*\\/\\<\\=\\>\\&\\#!]*';
   var MEC_RE = '\\|[^]*?\\|';
@@ -45826,7 +46282,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],191:[function(require,module,exports){
+},{}],195:[function(require,module,exports){
 module.exports = function(hljs) {
   var VARIABLE = {
     className: 'variable', begin: '\\b[gtps][A-Z]+[A-Za-z0-9_\\-]*\\b|\\$_[A-Z]+',
@@ -45984,7 +46440,7 @@ module.exports = function(hljs) {
     illegal: ';$|^\\[|^='
   };
 };
-},{}],192:[function(require,module,exports){
+},{}],196:[function(require,module,exports){
 module.exports = function(hljs) {
   var KEYWORDS = {
     keyword:
@@ -46135,7 +46591,7 @@ module.exports = function(hljs) {
     ])
   };
 };
-},{}],193:[function(require,module,exports){
+},{}],197:[function(require,module,exports){
 module.exports = function(hljs) {
   var OPENING_LONG_BRACKET = '\\[=*\\[';
   var CLOSING_LONG_BRACKET = '\\]=*\\]';
@@ -46191,7 +46647,7 @@ module.exports = function(hljs) {
     ])
   };
 };
-},{}],194:[function(require,module,exports){
+},{}],198:[function(require,module,exports){
 module.exports = function(hljs) {
   var VARIABLE = {
     className: 'variable',
@@ -46237,7 +46693,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],195:[function(require,module,exports){
+},{}],199:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['md', 'mkdown', 'mkd'],
@@ -46339,7 +46795,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],196:[function(require,module,exports){
+},{}],200:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['mma'],
@@ -46398,7 +46854,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],197:[function(require,module,exports){
+},{}],201:[function(require,module,exports){
 module.exports = function(hljs) {
   var COMMON_CONTAINS = [
     hljs.C_NUMBER_MODE,
@@ -46489,7 +46945,7 @@ module.exports = function(hljs) {
     ].concat(COMMON_CONTAINS)
   };
 };
-},{}],198:[function(require,module,exports){
+},{}],202:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     keywords:
@@ -46719,7 +47175,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],199:[function(require,module,exports){
+},{}],203:[function(require,module,exports){
 module.exports = function(hljs) {
   var KEYWORDS = {
     keyword:
@@ -46808,7 +47264,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],200:[function(require,module,exports){
+},{}],204:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     keywords:
@@ -46827,7 +47283,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],201:[function(require,module,exports){
+},{}],205:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     subLanguage: 'xml',
@@ -46852,7 +47308,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],202:[function(require,module,exports){
+},{}],206:[function(require,module,exports){
 module.exports = function(hljs) {
   var NUMBER = {
     className: 'number', relevance: 0,
@@ -46931,7 +47387,7 @@ module.exports = function(hljs) {
     ]
   }
 };
-},{}],203:[function(require,module,exports){
+},{}],207:[function(require,module,exports){
 module.exports = function(hljs) {
   var VAR = {
     className: 'variable',
@@ -47013,7 +47469,7 @@ module.exports = function(hljs) {
     illegal: '[^\\s\\}]'
   };
 };
-},{}],204:[function(require,module,exports){
+},{}],208:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['nim'],
@@ -47065,7 +47521,7 @@ module.exports = function(hljs) {
     ]
   }
 };
-},{}],205:[function(require,module,exports){
+},{}],209:[function(require,module,exports){
 module.exports = function(hljs) {
   var NIX_KEYWORDS = {
     keyword: 'rec with let in inherit assert if else then',
@@ -47116,7 +47572,7 @@ module.exports = function(hljs) {
     contains: EXPRESSIONS
   };
 };
-},{}],206:[function(require,module,exports){
+},{}],210:[function(require,module,exports){
 module.exports = function(hljs) {
   var CONSTANTS = {
     className: 'symbol',
@@ -47204,7 +47660,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],207:[function(require,module,exports){
+},{}],211:[function(require,module,exports){
 module.exports = function(hljs) {
   var API_CLASS = {
     className: 'built_in',
@@ -47283,7 +47739,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],208:[function(require,module,exports){
+},{}],212:[function(require,module,exports){
 module.exports = function(hljs) {
   /* missing support for heredoc-like string (OCaml 4.0.2+) */
   return {
@@ -47354,7 +47810,7 @@ module.exports = function(hljs) {
     ]
   }
 };
-},{}],209:[function(require,module,exports){
+},{}],213:[function(require,module,exports){
 module.exports = function(hljs) {
 	var SPECIAL_VARS = {
 		className: 'keyword',
@@ -47412,7 +47868,7 @@ module.exports = function(hljs) {
 		]
 	}
 };
-},{}],210:[function(require,module,exports){
+},{}],214:[function(require,module,exports){
 module.exports = function(hljs) {
   var OXYGENE_KEYWORDS = 'abstract add and array as asc aspect assembly async begin break block by case class concat const copy constructor continue '+
     'create default delegate desc distinct div do downto dynamic each else empty end ensure enum equals event except exit extension external false '+
@@ -47481,7 +47937,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],211:[function(require,module,exports){
+},{}],215:[function(require,module,exports){
 module.exports = function(hljs) {
   var CURLY_SUBCOMMENT = hljs.COMMENT(
     '{',
@@ -47529,7 +47985,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],212:[function(require,module,exports){
+},{}],216:[function(require,module,exports){
 module.exports = function(hljs) {
   var PERL_KEYWORDS = 'getpwent getservent quotemeta msgrcv scalar kill dbmclose undef lc ' +
     'ma syswrite tr send umask sysopen shmwrite vec qx utime local oct semctl localtime ' +
@@ -47686,7 +48142,7 @@ module.exports = function(hljs) {
     contains: PERL_DEFAULT_CONTAINS
   };
 };
-},{}],213:[function(require,module,exports){
+},{}],217:[function(require,module,exports){
 module.exports = function(hljs) {
   var MACRO = {
     className: 'variable',
@@ -47738,7 +48194,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],214:[function(require,module,exports){
+},{}],218:[function(require,module,exports){
 module.exports = function(hljs) {
   var VARIABLE = {
     className: 'variable', begin: '\\$+[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*'
@@ -47863,7 +48319,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],215:[function(require,module,exports){
+},{}],219:[function(require,module,exports){
 module.exports = function(hljs) {
   var backtickEscape = {
     begin: '`[\\s\\S]',
@@ -47911,7 +48367,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],216:[function(require,module,exports){
+},{}],220:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     keywords: {
@@ -47959,7 +48415,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],217:[function(require,module,exports){
+},{}],221:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     contains: [
@@ -48001,7 +48457,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],218:[function(require,module,exports){
+},{}],222:[function(require,module,exports){
 module.exports = function(hljs) {
 
   var ATOM = {
@@ -48090,7 +48546,7 @@ module.exports = function(hljs) {
     ])
   };
 };
-},{}],219:[function(require,module,exports){
+},{}],223:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     keywords: {
@@ -48127,7 +48583,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],220:[function(require,module,exports){
+},{}],224:[function(require,module,exports){
 module.exports = function(hljs) {
 
   var PUPPET_KEYWORDS = {
@@ -48235,7 +48691,7 @@ module.exports = function(hljs) {
     ]
   }
 };
-},{}],221:[function(require,module,exports){
+},{}],225:[function(require,module,exports){
 module.exports = function(hljs) {
   var PROMPT = {
     className: 'prompt',  begin: /^(>>>|\.\.\.) /
@@ -48320,7 +48776,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],222:[function(require,module,exports){
+},{}],226:[function(require,module,exports){
 module.exports = function(hljs) {
   var Q_KEYWORDS = {
   keyword:
@@ -48343,7 +48799,7 @@ module.exports = function(hljs) {
      ]
   };
 };
-},{}],223:[function(require,module,exports){
+},{}],227:[function(require,module,exports){
 module.exports = function(hljs) {
   var IDENT_RE = '([a-zA-Z]|\\.[a-zA-Z.])[a-zA-Z0-9._]*';
 
@@ -48413,7 +48869,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],224:[function(require,module,exports){
+},{}],228:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     keywords:
@@ -48440,7 +48896,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],225:[function(require,module,exports){
+},{}],229:[function(require,module,exports){
 module.exports = function(hljs) {
   var IDENTIFIER = '[a-zA-Z-_][^\n{\r\n]+\\{';
 
@@ -48500,7 +48956,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],226:[function(require,module,exports){
+},{}],230:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     keywords: {
@@ -48537,7 +48993,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],227:[function(require,module,exports){
+},{}],231:[function(require,module,exports){
 module.exports = function(hljs) {
   var RUBY_METHOD_RE = '[a-zA-Z_]\\w*[!?=]?|[-+~]\\@|<<|>>|=~|===?|<=>|[<>]=?|\\*\\*|[-/+%^&*~`|]|\\[\\]=?';
   var RUBY_KEYWORDS =
@@ -48707,7 +49163,7 @@ module.exports = function(hljs) {
     contains: COMMENT_MODES.concat(IRB_DEFAULT).concat(RUBY_DEFAULT_CONTAINS)
   };
 };
-},{}],228:[function(require,module,exports){
+},{}],232:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     keywords: {
@@ -48768,7 +49224,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],229:[function(require,module,exports){
+},{}],233:[function(require,module,exports){
 module.exports = function(hljs) {
   var NUM_SUFFIX = '([uif](8|16|32|64|size))\?';
   var BLOCK_COMMENT = hljs.inherit(hljs.C_BLOCK_COMMENT_MODE);
@@ -48854,7 +49310,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],230:[function(require,module,exports){
+},{}],234:[function(require,module,exports){
 module.exports = function(hljs) {
 
   var ANNOTATION = {
@@ -48917,7 +49373,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],231:[function(require,module,exports){
+},{}],235:[function(require,module,exports){
 module.exports = function(hljs) {
   var SCHEME_IDENT_RE = '[^\\(\\)\\[\\]\\{\\}",\'`;#|\\\\\\s]+';
   var SCHEME_SIMPLE_NUMBER_RE = '(\\-|\\+)?\\d+([./]\\d+)?';
@@ -49039,7 +49495,7 @@ module.exports = function(hljs) {
     contains: [SHEBANG, NUMBER, STRING, QUOTED_IDENT, LIST].concat(COMMENT_MODES)
   };
 };
-},{}],232:[function(require,module,exports){
+},{}],236:[function(require,module,exports){
 module.exports = function(hljs) {
 
   var COMMON_CONTAINS = [
@@ -49094,7 +49550,7 @@ module.exports = function(hljs) {
     ].concat(COMMON_CONTAINS)
   };
 };
-},{}],233:[function(require,module,exports){
+},{}],237:[function(require,module,exports){
 module.exports = function(hljs) {
   var IDENT_RE = '[a-zA-Z-][a-zA-Z0-9_-]*';
   var VARIABLE = {
@@ -49211,7 +49667,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],234:[function(require,module,exports){
+},{}],238:[function(require,module,exports){
 module.exports = function(hljs) {
   var smali_instr_low_prio = ['add', 'and', 'cmp', 'cmpg', 'cmpl', 'const', 'div', 'double', 'float', 'goto', 'if', 'int', 'long', 'move', 'mul', 'neg', 'new', 'nop', 'not', 'or', 'rem', 'return', 'shl', 'shr', 'sput', 'sub', 'throw', 'ushr', 'xor'];
   var smali_instr_high_prio = ['aget', 'aput', 'array', 'check', 'execute', 'fill', 'filled', 'goto/16', 'goto/32', 'iget', 'instance', 'invoke', 'iput', 'monitor', 'packed', 'sget', 'sparse'];
@@ -49294,7 +49750,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],235:[function(require,module,exports){
+},{}],239:[function(require,module,exports){
 module.exports = function(hljs) {
   var VAR_IDENT_RE = '[a-z][a-zA-Z0-9_]*';
   var CHAR = {
@@ -49347,7 +49803,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],236:[function(require,module,exports){
+},{}],240:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['ml'],
@@ -49412,7 +49868,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],237:[function(require,module,exports){
+},{}],241:[function(require,module,exports){
 module.exports = function(hljs) {
   var allCommands = ['!', '-', '+', '!=', '%', '&&', '*', '/', '=', '==', '>', '>=', '<', '<=', 'or', 'plus', '^', ':', '>>', 'abs', 'accTime', 'acos', 'action', 'actionKeys', 'actionKeysImages', 'actionKeysNames', 'actionKeysNamesArray', 'actionName', 'activateAddons', 'activatedAddons', 'activateKey', 'addAction', 'addBackpack', 'addBackpackCargo', 'addBackpackCargoGlobal', 'addBackpackGlobal', 'addCamShake', 'addCuratorAddons', 'addCuratorCameraArea', 'addCuratorEditableObjects', 'addCuratorEditingArea', 'addCuratorPoints', 'addEditorObject', 'addEventHandler', 'addGoggles', 'addGroupIcon', 'addHandgunItem', 'addHeadgear', 'addItem', 'addItemCargo', 'addItemCargoGlobal', 'addItemPool', 'addItemToBackpack', 'addItemToUniform', 'addItemToVest', 'addLiveStats', 'addMagazine', 'addMagazine array', 'addMagazineAmmoCargo', 'addMagazineCargo', 'addMagazineCargoGlobal', 'addMagazineGlobal', 'addMagazinePool', 'addMagazines', 'addMagazineTurret', 'addMenu', 'addMenuItem', 'addMissionEventHandler', 'addMPEventHandler', 'addMusicEventHandler', 'addPrimaryWeaponItem', 'addPublicVariableEventHandler', 'addRating', 'addResources', 'addScore', 'addScoreSide', 'addSecondaryWeaponItem', 'addSwitchableUnit', 'addTeamMember', 'addToRemainsCollector', 'addUniform', 'addVehicle', 'addVest', 'addWaypoint', 'addWeapon', 'addWeaponCargo', 'addWeaponCargoGlobal', 'addWeaponGlobal', 'addWeaponPool', 'addWeaponTurret', 'agent', 'agents', 'AGLToASL', 'aimedAtTarget', 'aimPos', 'airDensityRTD', 'airportSide', 'AISFinishHeal', 'alive', 'allControls', 'allCurators', 'allDead', 'allDeadMen', 'allDisplays', 'allGroups', 'allMapMarkers', 'allMines', 'allMissionObjects', 'allow3DMode', 'allowCrewInImmobile', 'allowCuratorLogicIgnoreAreas', 'allowDamage', 'allowDammage', 'allowFileOperations', 'allowFleeing', 'allowGetIn', 'allPlayers', 'allSites', 'allTurrets', 'allUnits', 'allUnitsUAV', 'allVariables', 'ammo', 'and', 'animate', 'animateDoor', 'animationPhase', 'animationState', 'append', 'armoryPoints', 'arrayIntersect', 'asin', 'ASLToAGL', 'ASLToATL', 'assert', 'assignAsCargo', 'assignAsCargoIndex', 'assignAsCommander', 'assignAsDriver', 'assignAsGunner', 'assignAsTurret', 'assignCurator', 'assignedCargo', 'assignedCommander', 'assignedDriver', 'assignedGunner', 'assignedItems', 'assignedTarget', 'assignedTeam', 'assignedVehicle', 'assignedVehicleRole', 'assignItem', 'assignTeam', 'assignToAirport', 'atan', 'atan2', 'atg', 'ATLToASL', 'attachedObject', 'attachedObjects', 'attachedTo', 'attachObject', 'attachTo', 'attackEnabled', 'backpack', 'backpackCargo', 'backpackContainer', 'backpackItems', 'backpackMagazines', 'backpackSpaceFor', 'behaviour', 'benchmark', 'binocular', 'blufor', 'boundingBox', 'boundingBoxReal', 'boundingCenter', 'breakOut', 'breakTo', 'briefingName', 'buildingExit', 'buildingPos', 'buttonAction', 'buttonSetAction', 'cadetMode', 'call', 'callExtension', 'camCommand', 'camCommit', 'camCommitPrepared', 'camCommitted', 'camConstuctionSetParams', 'camCreate', 'camDestroy', 'cameraEffect', 'cameraEffectEnableHUD', 'cameraInterest', 'cameraOn', 'cameraView', 'campaignConfigFile', 'camPreload', 'camPreloaded', 'camPrepareBank', 'camPrepareDir', 'camPrepareDive', 'camPrepareFocus', 'camPrepareFov', 'camPrepareFovRange', 'camPreparePos', 'camPrepareRelPos', 'camPrepareTarget', 'camSetBank', 'camSetDir', 'camSetDive', 'camSetFocus', 'camSetFov', 'camSetFovRange', 'camSetPos', 'camSetRelPos', 'camSetTarget', 'camTarget', 'camUseNVG', 'canAdd', 'canAddItemToBackpack', 'canAddItemToUniform', 'canAddItemToVest', 'cancelSimpleTaskDestination', 'canFire', 'canMove', 'canSlingLoad', 'canStand', 'canUnloadInCombat', 'captive', 'captiveNum', 'case', 'catch', 'cbChecked', 'cbSetChecked', 'ceil', 'cheatsEnabled', 'checkAIFeature', 'civilian', 'className', 'clearAllItemsFromBackpack', 'clearBackpackCargo', 'clearBackpackCargoGlobal', 'clearGroupIcons', 'clearItemCargo', 'clearItemCargoGlobal', 'clearItemPool', 'clearMagazineCargo', 'clearMagazineCargoGlobal', 'clearMagazinePool', 'clearOverlay', 'clearRadio', 'clearWeaponCargo', 'clearWeaponCargoGlobal', 'clearWeaponPool', 'closeDialog', 'closeDisplay', 'closeOverlay', 'collapseObjectTree', 'combatMode', 'commandArtilleryFire', 'commandChat', 'commander', 'commandFire', 'commandFollow', 'commandFSM', 'commandGetOut', 'commandingMenu', 'commandMove', 'commandRadio', 'commandStop', 'commandTarget', 'commandWatch', 'comment', 'commitOverlay', 'compile', 'compileFinal', 'completedFSM', 'composeText', 'configClasses', 'configFile', 'configHierarchy', 'configName', 'configProperties', 'configSourceMod', 'configSourceModList', 'connectTerminalToUAV', 'controlNull', 'controlsGroupCtrl', 'copyFromClipboard', 'copyToClipboard', 'copyWaypoints', 'cos', 'count', 'countEnemy', 'countFriendly', 'countSide', 'countType', 'countUnknown', 'createAgent', 'createCenter', 'createDialog', 'createDiaryLink', 'createDiaryRecord', 'createDiarySubject', 'createDisplay', 'createGearDialog', 'createGroup', 'createGuardedPoint', 'createLocation', 'createMarker', 'createMarkerLocal', 'createMenu', 'createMine', 'createMissionDisplay', 'createSimpleTask', 'createSite', 'createSoundSource', 'createTask', 'createTeam', 'createTrigger', 'createUnit', 'createUnit array', 'createVehicle', 'createVehicle array', 'createVehicleCrew', 'createVehicleLocal', 'crew', 'ctrlActivate', 'ctrlAddEventHandler', 'ctrlAutoScrollDelay', 'ctrlAutoScrollRewind', 'ctrlAutoScrollSpeed', 'ctrlChecked', 'ctrlClassName', 'ctrlCommit', 'ctrlCommitted', 'ctrlCreate', 'ctrlDelete', 'ctrlEnable', 'ctrlEnabled', 'ctrlFade', 'ctrlHTMLLoaded', 'ctrlIDC', 'ctrlIDD', 'ctrlMapAnimAdd', 'ctrlMapAnimClear', 'ctrlMapAnimCommit', 'ctrlMapAnimDone', 'ctrlMapCursor', 'ctrlMapMouseOver', 'ctrlMapScale', 'ctrlMapScreenToWorld', 'ctrlMapWorldToScreen', 'ctrlModel', 'ctrlModelDirAndUp', 'ctrlModelScale', 'ctrlParent', 'ctrlPosition', 'ctrlRemoveAllEventHandlers', 'ctrlRemoveEventHandler', 'ctrlScale', 'ctrlSetActiveColor', 'ctrlSetAutoScrollDelay', 'ctrlSetAutoScrollRewind', 'ctrlSetAutoScrollSpeed', 'ctrlSetBackgroundColor', 'ctrlSetChecked', 'ctrlSetEventHandler', 'ctrlSetFade', 'ctrlSetFocus', 'ctrlSetFont', 'ctrlSetFontH1', 'ctrlSetFontH1B', 'ctrlSetFontH2', 'ctrlSetFontH2B', 'ctrlSetFontH3', 'ctrlSetFontH3B', 'ctrlSetFontH4', 'ctrlSetFontH4B', 'ctrlSetFontH5', 'ctrlSetFontH5B', 'ctrlSetFontH6', 'ctrlSetFontH6B', 'ctrlSetFontHeight', 'ctrlSetFontHeightH1', 'ctrlSetFontHeightH2', 'ctrlSetFontHeightH3', 'ctrlSetFontHeightH4', 'ctrlSetFontHeightH5', 'ctrlSetFontHeightH6', 'ctrlSetFontP', 'ctrlSetFontPB', 'ctrlSetForegroundColor', 'ctrlSetModel', 'ctrlSetModelDirAndUp', 'ctrlSetModelScale', 'ctrlSetPosition', 'ctrlSetScale', 'ctrlSetStructuredText', 'ctrlSetText', 'ctrlSetTextColor', 'ctrlSetTooltip', 'ctrlSetTooltipColorBox', 'ctrlSetTooltipColorShade', 'ctrlSetTooltipColorText', 'ctrlShow', 'ctrlShown', 'ctrlText', 'ctrlTextHeight', 'ctrlType', 'ctrlVisible', 'curatorAddons', 'curatorCamera', 'curatorCameraArea', 'curatorCameraAreaCeiling', 'curatorCoef', 'curatorEditableObjects', 'curatorEditingArea', 'curatorEditingAreaType', 'curatorMouseOver', 'curatorPoints', 'curatorRegisteredObjects', 'curatorSelected', 'curatorWaypointCost', 'currentChannel', 'currentCommand', 'currentMagazine', 'currentMagazineDetail', 'currentMagazineDetailTurret', 'currentMagazineTurret', 'currentMuzzle', 'currentNamespace', 'currentTask', 'currentTasks', 'currentThrowable', 'currentVisionMode', 'currentWaypoint', 'currentWeapon', 'currentWeaponMode', 'currentWeaponTurret', 'currentZeroing', 'cursorTarget', 'customChat', 'customRadio', 'cutFadeOut', 'cutObj', 'cutRsc', 'cutText', 'damage', 'date', 'dateToNumber', 'daytime', 'deActivateKey', 'debriefingText', 'debugFSM', 'debugLog', 'default', 'deg', 'deleteAt', 'deleteCenter', 'deleteCollection', 'deleteEditorObject', 'deleteGroup', 'deleteIdentity', 'deleteLocation', 'deleteMarker', 'deleteMarkerLocal', 'deleteRange', 'deleteResources', 'deleteSite', 'deleteStatus', 'deleteTeam', 'deleteVehicle', 'deleteVehicleCrew', 'deleteWaypoint', 'detach', 'detectedMines', 'diag activeMissionFSMs', 'diag activeSQFScripts', 'diag activeSQSScripts', 'diag captureFrame', 'diag captureSlowFrame', 'diag fps', 'diag fpsMin', 'diag frameNo', 'diag log', 'diag logSlowFrame', 'diag tickTime', 'dialog', 'diarySubjectExists', 'didJIP', 'didJIPOwner', 'difficulty', 'difficultyEnabled', 'difficultyEnabledRTD', 'direction', 'directSay', 'disableAI', 'disableCollisionWith', 'disableConversation', 'disableDebriefingStats', 'disableSerialization', 'disableTIEquipment', 'disableUAVConnectability', 'disableUserInput', 'displayAddEventHandler', 'displayCtrl', 'displayNull', 'displayRemoveAllEventHandlers', 'displayRemoveEventHandler', 'displaySetEventHandler', 'dissolveTeam', 'distance', 'distance2D', 'distanceSqr', 'distributionRegion', 'do', 'doArtilleryFire', 'doFire', 'doFollow', 'doFSM', 'doGetOut', 'doMove', 'doorPhase', 'doStop', 'doTarget', 'doWatch', 'drawArrow', 'drawEllipse', 'drawIcon', 'drawIcon3D', 'drawLine', 'drawLine3D', 'drawLink', 'drawLocation', 'drawRectangle', 'driver', 'drop', 'east', 'echo', 'editObject', 'editorSetEventHandler', 'effectiveCommander', 'else', 'emptyPositions', 'enableAI', 'enableAIFeature', 'enableAttack', 'enableCamShake', 'enableCaustics', 'enableCollisionWith', 'enableCopilot', 'enableDebriefingStats', 'enableDiagLegend', 'enableEndDialog', 'enableEngineArtillery', 'enableEnvironment', 'enableFatigue', 'enableGunLights', 'enableIRLasers', 'enableMimics', 'enablePersonTurret', 'enableRadio', 'enableReload', 'enableRopeAttach', 'enableSatNormalOnDetail', 'enableSaving', 'enableSentences', 'enableSimulation', 'enableSimulationGlobal', 'enableTeamSwitch', 'enableUAVConnectability', 'enableUAVWaypoints', 'endLoadingScreen', 'endMission', 'engineOn', 'enginesIsOnRTD', 'enginesRpmRTD', 'enginesTorqueRTD', 'entities', 'estimatedEndServerTime', 'estimatedTimeLeft', 'evalObjectArgument', 'everyBackpack', 'everyContainer', 'exec', 'execEditorScript', 'execFSM', 'execVM', 'exit', 'exitWith', 'exp', 'expectedDestination', 'eyeDirection', 'eyePos', 'face', 'faction', 'fadeMusic', 'fadeRadio', 'fadeSound', 'fadeSpeech', 'failMission', 'false', 'fillWeaponsFromPool', 'find', 'findCover', 'findDisplay', 'findEditorObject', 'findEmptyPosition', 'findEmptyPositionReady', 'findNearestEnemy', 'finishMissionInit', 'finite', 'fire', 'fireAtTarget', 'firstBackpack', 'flag', 'flagOwner', 'fleeing', 'floor', 'flyInHeight', 'fog', 'fogForecast', 'fogParams', 'for', 'forceAddUniform', 'forceEnd', 'forceMap', 'forceRespawn', 'forceSpeed', 'forceWalk', 'forceWeaponFire', 'forceWeatherChange', 'forEach', 'forEachMember', 'forEachMemberAgent', 'forEachMemberTeam', 'format', 'formation', 'formationDirection', 'formationLeader', 'formationMembers', 'formationPosition', 'formationTask', 'formatText', 'formLeader', 'freeLook', 'from', 'fromEditor', 'fuel', 'fullCrew', 'gearSlotAmmoCount', 'gearSlotData', 'getAllHitPointsDamage', 'getAmmoCargo', 'getArray', 'getArtilleryAmmo', 'getArtilleryComputerSettings', 'getArtilleryETA', 'getAssignedCuratorLogic', 'getAssignedCuratorUnit', 'getBackpackCargo', 'getBleedingRemaining', 'getBurningValue', 'getCargoIndex', 'getCenterOfMass', 'getClientState', 'getConnectedUAV', 'getDammage', 'getDescription', 'getDir', 'getDirVisual', 'getDLCs', 'getEditorCamera', 'getEditorMode', 'getEditorObjectScope', 'getElevationOffset', 'getFatigue', 'getFriend', 'getFSMVariable', 'getFuelCargo', 'getGroupIcon', 'getGroupIconParams', 'getGroupIcons', 'getHideFrom', 'getHit', 'getHitIndex', 'getHitPointDamage', 'getItemCargo', 'getMagazineCargo', 'getMarkerColor', 'getMarkerPos', 'getMarkerSize', 'getMarkerType', 'getMass', 'getModelInfo', 'getNumber', 'getObjectArgument', 'getObjectChildren', 'getObjectDLC', 'getObjectMaterials', 'getObjectProxy', 'getObjectTextures', 'getObjectType', 'getObjectViewDistance', 'getOxygenRemaining', 'getPersonUsedDLCs', 'getPlayerChannel', 'getPlayerUID', 'getPos', 'getPosASL', 'getPosASLVisual', 'getPosASLW', 'getPosATL', 'getPosATLVisual', 'getPosVisual', 'getPosWorld', 'getRepairCargo', 'getResolution', 'getShadowDistance', 'getSlingLoad', 'getSpeed', 'getSuppression', 'getTerrainHeightASL', 'getText', 'getVariable', 'getWeaponCargo', 'getWPPos', 'glanceAt', 'globalChat', 'globalRadio', 'goggles', 'goto', 'group', 'groupChat', 'groupFromNetId', 'groupIconSelectable', 'groupIconsVisible', 'groupId', 'groupOwner', 'groupRadio', 'groupSelectedUnits', 'groupSelectUnit', 'grpNull', 'gunner', 'gusts', 'halt', 'handgunItems', 'handgunMagazine', 'handgunWeapon', 'handsHit', 'hasInterface', 'hasWeapon', 'hcAllGroups', 'hcGroupParams', 'hcLeader', 'hcRemoveAllGroups', 'hcRemoveGroup', 'hcSelected', 'hcSelectGroup', 'hcSetGroup', 'hcShowBar', 'hcShownBar', 'headgear', 'hideBody', 'hideObject', 'hideObjectGlobal', 'hint', 'hintC', 'hintCadet', 'hintSilent', 'hmd', 'hostMission', 'htmlLoad', 'HUDMovementLevels', 'humidity', 'if', 'image', 'importAllGroups', 'importance', 'in', 'incapacitatedState', 'independent', 'inflame', 'inflamed', 'inGameUISetEventHandler', 'inheritsFrom', 'initAmbientLife', 'inputAction', 'inRangeOfArtillery', 'insertEditorObject', 'intersect', 'isAbleToBreathe', 'isAgent', 'isArray', 'isAutoHoverOn', 'isAutonomous', 'isAutotest', 'isBleeding', 'isBurning', 'isClass', 'isCollisionLightOn', 'isCopilotEnabled', 'isDedicated', 'isDLCAvailable', 'isEngineOn', 'isEqualTo', 'isFlashlightOn', 'isFlatEmpty', 'isForcedWalk', 'isFormationLeader', 'isHidden', 'isInRemainsCollector', 'isInstructorFigureEnabled', 'isIRLaserOn', 'isKeyActive', 'isKindOf', 'isLightOn', 'isLocalized', 'isManualFire', 'isMarkedForCollection', 'isMultiplayer', 'isNil', 'isNull', 'isNumber', 'isObjectHidden', 'isObjectRTD', 'isOnRoad', 'isPipEnabled', 'isPlayer', 'isRealTime', 'isServer', 'isShowing3DIcons', 'isSteamMission', 'isStreamFriendlyUIEnabled', 'isText', 'isTouchingGround', 'isTurnedOut', 'isTutHintsEnabled', 'isUAVConnectable', 'isUAVConnected', 'isUniformAllowed', 'isWalking', 'isWeaponDeployed', 'isWeaponRested', 'itemCargo', 'items', 'itemsWithMagazines', 'join', 'joinAs', 'joinAsSilent', 'joinSilent', 'joinString', 'kbAddDatabase', 'kbAddDatabaseTargets', 'kbAddTopic', 'kbHasTopic', 'kbReact', 'kbRemoveTopic', 'kbTell', 'kbWasSaid', 'keyImage', 'keyName', 'knowsAbout', 'land', 'landAt', 'landResult', 'language', 'laserTarget', 'lbAdd', 'lbClear', 'lbColor', 'lbCurSel', 'lbData', 'lbDelete', 'lbIsSelected', 'lbPicture', 'lbSelection', 'lbSetColor', 'lbSetCurSel', 'lbSetData', 'lbSetPicture', 'lbSetPictureColor', 'lbSetPictureColorDisabled', 'lbSetPictureColorSelected', 'lbSetSelectColor', 'lbSetSelectColorRight', 'lbSetSelected', 'lbSetTooltip', 'lbSetValue', 'lbSize', 'lbSort', 'lbSortByValue', 'lbText', 'lbValue', 'leader', 'leaderboardDeInit', 'leaderboardGetRows', 'leaderboardInit', 'leaveVehicle', 'libraryCredits', 'libraryDisclaimers', 'lifeState', 'lightAttachObject', 'lightDetachObject', 'lightIsOn', 'lightnings', 'limitSpeed', 'linearConversion', 'lineBreak', 'lineIntersects', 'lineIntersectsObjs', 'lineIntersectsSurfaces', 'lineIntersectsWith', 'linkItem', 'list', 'listObjects', 'ln', 'lnbAddArray', 'lnbAddColumn', 'lnbAddRow', 'lnbClear', 'lnbColor', 'lnbCurSelRow', 'lnbData', 'lnbDeleteColumn', 'lnbDeleteRow', 'lnbGetColumnsPosition', 'lnbPicture', 'lnbSetColor', 'lnbSetColumnsPos', 'lnbSetCurSelRow', 'lnbSetData', 'lnbSetPicture', 'lnbSetText', 'lnbSetValue', 'lnbSize', 'lnbText', 'lnbValue', 'load', 'loadAbs', 'loadBackpack', 'loadFile', 'loadGame', 'loadIdentity', 'loadMagazine', 'loadOverlay', 'loadStatus', 'loadUniform', 'loadVest', 'local', 'localize', 'locationNull', 'locationPosition', 'lock', 'lockCameraTo', 'lockCargo', 'lockDriver', 'locked', 'lockedCargo', 'lockedDriver', 'lockedTurret', 'lockTurret', 'lockWP', 'log', 'logEntities', 'lookAt', 'lookAtPos', 'magazineCargo', 'magazines', 'magazinesAllTurrets', 'magazinesAmmo', 'magazinesAmmoCargo', 'magazinesAmmoFull', 'magazinesDetail', 'magazinesDetailBackpack', 'magazinesDetailUniform', 'magazinesDetailVest', 'magazinesTurret', 'magazineTurretAmmo', 'mapAnimAdd', 'mapAnimClear', 'mapAnimCommit', 'mapAnimDone', 'mapCenterOnCamera', 'mapGridPosition', 'markAsFinishedOnSteam', 'markerAlpha', 'markerBrush', 'markerColor', 'markerDir', 'markerPos', 'markerShape', 'markerSize', 'markerText', 'markerType', 'max', 'members', 'min', 'mineActive', 'mineDetectedBy', 'missionConfigFile', 'missionName', 'missionNamespace', 'missionStart', 'mod', 'modelToWorld', 'modelToWorldVisual', 'moonIntensity', 'morale', 'move', 'moveInAny', 'moveInCargo', 'moveInCommander', 'moveInDriver', 'moveInGunner', 'moveInTurret', 'moveObjectToEnd', 'moveOut', 'moveTime', 'moveTo', 'moveToCompleted', 'moveToFailed', 'musicVolume', 'name', 'name location', 'nameSound', 'nearEntities', 'nearestBuilding', 'nearestLocation', 'nearestLocations', 'nearestLocationWithDubbing', 'nearestObject', 'nearestObjects', 'nearObjects', 'nearObjectsReady', 'nearRoads', 'nearSupplies', 'nearTargets', 'needReload', 'netId', 'netObjNull', 'newOverlay', 'nextMenuItemIndex', 'nextWeatherChange', 'nil', 'nMenuItems', 'not', 'numberToDate', 'objectCurators', 'objectFromNetId', 'objectParent', 'objNull', 'objStatus', 'onBriefingGroup', 'onBriefingNotes', 'onBriefingPlan', 'onBriefingTeamSwitch', 'onCommandModeChanged', 'onDoubleClick', 'onEachFrame', 'onGroupIconClick', 'onGroupIconOverEnter', 'onGroupIconOverLeave', 'onHCGroupSelectionChanged', 'onMapSingleClick', 'onPlayerConnected', 'onPlayerDisconnected', 'onPreloadFinished', 'onPreloadStarted', 'onShowNewObject', 'onTeamSwitch', 'openCuratorInterface', 'openMap', 'openYoutubeVideo', 'opfor', 'or', 'orderGetIn', 'overcast', 'overcastForecast', 'owner', 'param', 'params', 'parseNumber', 'parseText', 'parsingNamespace', 'particlesQuality', 'pi', 'pickWeaponPool', 'pitch', 'playableSlotsNumber', 'playableUnits', 'playAction', 'playActionNow', 'player', 'playerRespawnTime', 'playerSide', 'playersNumber', 'playGesture', 'playMission', 'playMove', 'playMoveNow', 'playMusic', 'playScriptedMission', 'playSound', 'playSound3D', 'position', 'positionCameraToWorld', 'posScreenToWorld', 'posWorldToScreen', 'ppEffectAdjust', 'ppEffectCommit', 'ppEffectCommitted', 'ppEffectCreate', 'ppEffectDestroy', 'ppEffectEnable', 'ppEffectForceInNVG', 'precision', 'preloadCamera', 'preloadObject', 'preloadSound', 'preloadTitleObj', 'preloadTitleRsc', 'preprocessFile', 'preprocessFileLineNumbers', 'primaryWeapon', 'primaryWeaponItems', 'primaryWeaponMagazine', 'priority', 'private', 'processDiaryLink', 'productVersion', 'profileName', 'profileNamespace', 'profileNameSteam', 'progressLoadingScreen', 'progressPosition', 'progressSetPosition', 'publicVariable', 'publicVariableClient', 'publicVariableServer', 'pushBack', 'putWeaponPool', 'queryItemsPool', 'queryMagazinePool', 'queryWeaponPool', 'rad', 'radioChannelAdd', 'radioChannelCreate', 'radioChannelRemove', 'radioChannelSetCallSign', 'radioChannelSetLabel', 'radioVolume', 'rain', 'rainbow', 'random', 'rank', 'rankId', 'rating', 'rectangular', 'registeredTasks', 'registerTask', 'reload', 'reloadEnabled', 'remoteControl', 'remoteExec', 'remoteExecCall', 'removeAction', 'removeAllActions', 'removeAllAssignedItems', 'removeAllContainers', 'removeAllCuratorAddons', 'removeAllCuratorCameraAreas', 'removeAllCuratorEditingAreas', 'removeAllEventHandlers', 'removeAllHandgunItems', 'removeAllItems', 'removeAllItemsWithMagazines', 'removeAllMissionEventHandlers', 'removeAllMPEventHandlers', 'removeAllMusicEventHandlers', 'removeAllPrimaryWeaponItems', 'removeAllWeapons', 'removeBackpack', 'removeBackpackGlobal', 'removeCuratorAddons', 'removeCuratorCameraArea', 'removeCuratorEditableObjects', 'removeCuratorEditingArea', 'removeDrawIcon', 'removeDrawLinks', 'removeEventHandler', 'removeFromRemainsCollector', 'removeGoggles', 'removeGroupIcon', 'removeHandgunItem', 'removeHeadgear', 'removeItem', 'removeItemFromBackpack', 'removeItemFromUniform', 'removeItemFromVest', 'removeItems', 'removeMagazine', 'removeMagazineGlobal', 'removeMagazines', 'removeMagazinesTurret', 'removeMagazineTurret', 'removeMenuItem', 'removeMissionEventHandler', 'removeMPEventHandler', 'removeMusicEventHandler', 'removePrimaryWeaponItem', 'removeSecondaryWeaponItem', 'removeSimpleTask', 'removeSwitchableUnit', 'removeTeamMember', 'removeUniform', 'removeVest', 'removeWeapon', 'removeWeaponGlobal', 'removeWeaponTurret', 'requiredVersion', 'resetCamShake', 'resetSubgroupDirection', 'resistance', 'resize', 'resources', 'respawnVehicle', 'restartEditorCamera', 'reveal', 'revealMine', 'reverse', 'reversedMouseY', 'roadsConnectedTo', 'roleDescription', 'ropeAttachedObjects', 'ropeAttachedTo', 'ropeAttachEnabled', 'ropeAttachTo', 'ropeCreate', 'ropeCut', 'ropeEndPosition', 'ropeLength', 'ropes', 'ropeUnwind', 'ropeUnwound', 'rotorsForcesRTD', 'rotorsRpmRTD', 'round', 'runInitScript', 'safeZoneH', 'safeZoneW', 'safeZoneWAbs', 'safeZoneX', 'safeZoneXAbs', 'safeZoneY', 'saveGame', 'saveIdentity', 'saveJoysticks', 'saveOverlay', 'saveProfileNamespace', 'saveStatus', 'saveVar', 'savingEnabled', 'say', 'say2D', 'say3D', 'scopeName', 'score', 'scoreSide', 'screenToWorld', 'scriptDone', 'scriptName', 'scriptNull', 'scudState', 'secondaryWeapon', 'secondaryWeaponItems', 'secondaryWeaponMagazine', 'select', 'selectBestPlaces', 'selectDiarySubject', 'selectedEditorObjects', 'selectEditorObject', 'selectionPosition', 'selectLeader', 'selectNoPlayer', 'selectPlayer', 'selectWeapon', 'selectWeaponTurret', 'sendAUMessage', 'sendSimpleCommand', 'sendTask', 'sendTaskResult', 'sendUDPMessage', 'serverCommand', 'serverCommandAvailable', 'serverCommandExecutable', 'serverName', 'serverTime', 'set', 'setAccTime', 'setAirportSide', 'setAmmo', 'setAmmoCargo', 'setAperture', 'setApertureNew', 'setArmoryPoints', 'setAttributes', 'setAutonomous', 'setBehaviour', 'setBleedingRemaining', 'setCameraInterest', 'setCamShakeDefParams', 'setCamShakeParams', 'setCamUseTi', 'setCaptive', 'setCenterOfMass', 'setCollisionLight', 'setCombatMode', 'setCompassOscillation', 'setCuratorCameraAreaCeiling', 'setCuratorCoef', 'setCuratorEditingAreaType', 'setCuratorWaypointCost', 'setCurrentChannel', 'setCurrentTask', 'setCurrentWaypoint', 'setDamage', 'setDammage', 'setDate', 'setDebriefingText', 'setDefaultCamera', 'setDestination', 'setDetailMapBlendPars', 'setDir', 'setDirection', 'setDrawIcon', 'setDropInterval', 'setEditorMode', 'setEditorObjectScope', 'setEffectCondition', 'setFace', 'setFaceAnimation', 'setFatigue', 'setFlagOwner', 'setFlagSide', 'setFlagTexture', 'setFog', 'setFog array', 'setFormation', 'setFormationTask', 'setFormDir', 'setFriend', 'setFromEditor', 'setFSMVariable', 'setFuel', 'setFuelCargo', 'setGroupIcon', 'setGroupIconParams', 'setGroupIconsSelectable', 'setGroupIconsVisible', 'setGroupId', 'setGroupIdGlobal', 'setGroupOwner', 'setGusts', 'setHideBehind', 'setHit', 'setHitIndex', 'setHitPointDamage', 'setHorizonParallaxCoef', 'setHUDMovementLevels', 'setIdentity', 'setImportance', 'setLeader', 'setLightAmbient', 'setLightAttenuation', 'setLightBrightness', 'setLightColor', 'setLightDayLight', 'setLightFlareMaxDistance', 'setLightFlareSize', 'setLightIntensity', 'setLightnings', 'setLightUseFlare', 'setLocalWindParams', 'setMagazineTurretAmmo', 'setMarkerAlpha', 'setMarkerAlphaLocal', 'setMarkerBrush', 'setMarkerBrushLocal', 'setMarkerColor', 'setMarkerColorLocal', 'setMarkerDir', 'setMarkerDirLocal', 'setMarkerPos', 'setMarkerPosLocal', 'setMarkerShape', 'setMarkerShapeLocal', 'setMarkerSize', 'setMarkerSizeLocal', 'setMarkerText', 'setMarkerTextLocal', 'setMarkerType', 'setMarkerTypeLocal', 'setMass', 'setMimic', 'setMousePosition', 'setMusicEffect', 'setMusicEventHandler', 'setName', 'setNameSound', 'setObjectArguments', 'setObjectMaterial', 'setObjectProxy', 'setObjectTexture', 'setObjectTextureGlobal', 'setObjectViewDistance', 'setOvercast', 'setOwner', 'setOxygenRemaining', 'setParticleCircle', 'setParticleClass', 'setParticleFire', 'setParticleParams', 'setParticleRandom', 'setPilotLight', 'setPiPEffect', 'setPitch', 'setPlayable', 'setPlayerRespawnTime', 'setPos', 'setPosASL', 'setPosASL2', 'setPosASLW', 'setPosATL', 'setPosition', 'setPosWorld', 'setRadioMsg', 'setRain', 'setRainbow', 'setRandomLip', 'setRank', 'setRectangular', 'setRepairCargo', 'setShadowDistance', 'setSide', 'setSimpleTaskDescription', 'setSimpleTaskDestination', 'setSimpleTaskTarget', 'setSimulWeatherLayers', 'setSize', 'setSkill', 'setSkill array', 'setSlingLoad', 'setSoundEffect', 'setSpeaker', 'setSpeech', 'setSpeedMode', 'setStatValue', 'setSuppression', 'setSystemOfUnits', 'setTargetAge', 'setTaskResult', 'setTaskState', 'setTerrainGrid', 'setText', 'setTimeMultiplier', 'setTitleEffect', 'setTriggerActivation', 'setTriggerArea', 'setTriggerStatements', 'setTriggerText', 'setTriggerTimeout', 'setTriggerType', 'setType', 'setUnconscious', 'setUnitAbility', 'setUnitPos', 'setUnitPosWeak', 'setUnitRank', 'setUnitRecoilCoefficient', 'setUnloadInCombat', 'setUserActionText', 'setVariable', 'setVectorDir', 'setVectorDirAndUp', 'setVectorUp', 'setVehicleAmmo', 'setVehicleAmmoDef', 'setVehicleArmor', 'setVehicleId', 'setVehicleLock', 'setVehiclePosition', 'setVehicleTiPars', 'setVehicleVarName', 'setVelocity', 'setVelocityTransformation', 'setViewDistance', 'setVisibleIfTreeCollapsed', 'setWaves', 'setWaypointBehaviour', 'setWaypointCombatMode', 'setWaypointCompletionRadius', 'setWaypointDescription', 'setWaypointFormation', 'setWaypointHousePosition', 'setWaypointLoiterRadius', 'setWaypointLoiterType', 'setWaypointName', 'setWaypointPosition', 'setWaypointScript', 'setWaypointSpeed', 'setWaypointStatements', 'setWaypointTimeout', 'setWaypointType', 'setWaypointVisible', 'setWeaponReloadingTime', 'setWind', 'setWindDir', 'setWindForce', 'setWindStr', 'setWPPos', 'show3DIcons', 'showChat', 'showCinemaBorder', 'showCommandingMenu', 'showCompass', 'showCuratorCompass', 'showGPS', 'showHUD', 'showLegend', 'showMap', 'shownArtilleryComputer', 'shownChat', 'shownCompass', 'shownCuratorCompass', 'showNewEditorObject', 'shownGPS', 'shownHUD', 'shownMap', 'shownPad', 'shownRadio', 'shownUAVFeed', 'shownWarrant', 'shownWatch', 'showPad', 'showRadio', 'showSubtitles', 'showUAVFeed', 'showWarrant', 'showWatch', 'showWaypoint', 'side', 'sideChat', 'sideEnemy', 'sideFriendly', 'sideLogic', 'sideRadio', 'sideUnknown', 'simpleTasks', 'simulationEnabled', 'simulCloudDensity', 'simulCloudOcclusion', 'simulInClouds', 'simulWeatherSync', 'sin', 'size', 'sizeOf', 'skill', 'skillFinal', 'skipTime', 'sleep', 'sliderPosition', 'sliderRange', 'sliderSetPosition', 'sliderSetRange', 'sliderSetSpeed', 'sliderSpeed', 'slingLoadAssistantShown', 'soldierMagazines', 'someAmmo', 'sort', 'soundVolume', 'spawn', 'speaker', 'speed', 'speedMode', 'splitString', 'sqrt', 'squadParams', 'stance', 'startLoadingScreen', 'step', 'stop', 'stopped', 'str', 'sunOrMoon', 'supportInfo', 'suppressFor', 'surfaceIsWater', 'surfaceNormal', 'surfaceType', 'swimInDepth', 'switch', 'switchableUnits', 'switchAction', 'switchCamera', 'switchGesture', 'switchLight', 'switchMove', 'synchronizedObjects', 'synchronizedTriggers', 'synchronizedWaypoints', 'synchronizeObjectsAdd', 'synchronizeObjectsRemove', 'synchronizeTrigger', 'synchronizeWaypoint', 'synchronizeWaypoint trigger', 'systemChat', 'systemOfUnits', 'tan', 'targetKnowledge', 'targetsAggregate', 'targetsQuery', 'taskChildren', 'taskCompleted', 'taskDescription', 'taskDestination', 'taskHint', 'taskNull', 'taskParent', 'taskResult', 'taskState', 'teamMember', 'teamMemberNull', 'teamName', 'teams', 'teamSwitch', 'teamSwitchEnabled', 'teamType', 'terminate', 'terrainIntersect', 'terrainIntersectASL', 'text', 'text location', 'textLog', 'textLogFormat', 'tg', 'then', 'throw', 'time', 'timeMultiplier', 'titleCut', 'titleFadeOut', 'titleObj', 'titleRsc', 'titleText', 'to', 'toArray', 'toLower', 'toString', 'toUpper', 'triggerActivated', 'triggerActivation', 'triggerArea', 'triggerAttachedVehicle', 'triggerAttachObject', 'triggerAttachVehicle', 'triggerStatements', 'triggerText', 'triggerTimeout', 'triggerTimeoutCurrent', 'triggerType', 'true', 'try', 'turretLocal', 'turretOwner', 'turretUnit', 'tvAdd', 'tvClear', 'tvCollapse', 'tvCount', 'tvCurSel', 'tvData', 'tvDelete', 'tvExpand', 'tvPicture', 'tvSetCurSel', 'tvSetData', 'tvSetPicture', 'tvSetPictureColor', 'tvSetTooltip', 'tvSetValue', 'tvSort', 'tvSortByValue', 'tvText', 'tvValue', 'type', 'typeName', 'typeOf', 'UAVControl', 'uiNamespace', 'uiSleep', 'unassignCurator', 'unassignItem', 'unassignTeam', 'unassignVehicle', 'underwater', 'uniform', 'uniformContainer', 'uniformItems', 'uniformMagazines', 'unitAddons', 'unitBackpack', 'unitPos', 'unitReady', 'unitRecoilCoefficient', 'units', 'unitsBelowHeight', 'unlinkItem', 'unlockAchievement', 'unregisterTask', 'updateDrawIcon', 'updateMenuItem', 'updateObjectTree', 'useAudioTimeForMoves', 'vectorAdd', 'vectorCos', 'vectorCrossProduct', 'vectorDiff', 'vectorDir', 'vectorDirVisual', 'vectorDistance', 'vectorDistanceSqr', 'vectorDotProduct', 'vectorFromTo', 'vectorMagnitude', 'vectorMagnitudeSqr', 'vectorMultiply', 'vectorNormalized', 'vectorUp', 'vectorUpVisual', 'vehicle', 'vehicleChat', 'vehicleRadio', 'vehicles', 'vehicleVarName', 'velocity', 'velocityModelSpace', 'verifySignature', 'vest', 'vestContainer', 'vestItems', 'vestMagazines', 'viewDistance', 'visibleCompass', 'visibleGPS', 'visibleMap', 'visiblePosition', 'visiblePositionASL', 'visibleWatch', 'waitUntil', 'waves', 'waypointAttachedObject', 'waypointAttachedVehicle', 'waypointAttachObject', 'waypointAttachVehicle', 'waypointBehaviour', 'waypointCombatMode', 'waypointCompletionRadius', 'waypointDescription', 'waypointFormation', 'waypointHousePosition', 'waypointLoiterRadius', 'waypointLoiterType', 'waypointName', 'waypointPosition', 'waypoints', 'waypointScript', 'waypointsEnabledUAV', 'waypointShow', 'waypointSpeed', 'waypointStatements', 'waypointTimeout', 'waypointTimeoutCurrent', 'waypointType', 'waypointVisible', 'weaponAccessories', 'weaponCargo', 'weaponDirection', 'weaponLowered', 'weapons', 'weaponsItems', 'weaponsItemsCargo', 'weaponState', 'weaponsTurret', 'weightRTD', 'west', 'WFSideText', 'while', 'wind', 'windDir', 'windStr', 'wingsForcesRTD', 'with', 'worldName', 'worldSize', 'worldToModel', 'worldToModelVisual', 'worldToScreen'];
   var control = ['case', 'catch', 'default', 'do', 'else', 'exit', 'exitWith|5', 'for', 'forEach', 'from', 'if', 'switch', 'then', 'throw', 'to', 'try', 'while', 'with'];
@@ -49508,7 +49964,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],238:[function(require,module,exports){
+},{}],242:[function(require,module,exports){
 module.exports = function(hljs) {
   var COMMENT_MODE = hljs.COMMENT('--', '$');
   return {
@@ -49668,7 +50124,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],239:[function(require,module,exports){
+},{}],243:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['do', 'ado'],
@@ -49706,7 +50162,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],240:[function(require,module,exports){
+},{}],244:[function(require,module,exports){
 module.exports = function(hljs) {
   var STEP21_IDENT_RE = '[A-Z_][A-Z0-9_.]*';
   var STEP21_CLOSE_RE = 'END-ISO-10303-21;';
@@ -49758,7 +50214,7 @@ module.exports = function(hljs) {
     ].concat(STEP21_CODE)
   };
 };
-},{}],241:[function(require,module,exports){
+},{}],245:[function(require,module,exports){
 module.exports = function(hljs) {
 
   var VARIABLE = {
@@ -50201,7 +50657,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],242:[function(require,module,exports){
+},{}],246:[function(require,module,exports){
 module.exports = function(hljs) {
   var SWIFT_KEYWORDS = {
       keyword: '__COLUMN__ __FILE__ __FUNCTION__ __LINE__ as as! as? associativity ' +
@@ -50321,7 +50777,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],243:[function(require,module,exports){
+},{}],247:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['tk'],
@@ -50383,7 +50839,7 @@ module.exports = function(hljs) {
     ]
   }
 };
-},{}],244:[function(require,module,exports){
+},{}],248:[function(require,module,exports){
 module.exports = function(hljs) {
   var COMMAND1 = {
     className: 'command',
@@ -50438,7 +50894,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],245:[function(require,module,exports){
+},{}],249:[function(require,module,exports){
 module.exports = function(hljs) {
   var BUILT_IN_TYPES = 'bool byte i16 i32 i64 double string binary';
   return {
@@ -50473,7 +50929,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],246:[function(require,module,exports){
+},{}],250:[function(require,module,exports){
 module.exports = function(hljs) {
   var TPID = {
     className: 'number',
@@ -50557,7 +51013,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],247:[function(require,module,exports){
+},{}],251:[function(require,module,exports){
 module.exports = function(hljs) {
   var PARAMS = {
     className: 'params',
@@ -50614,7 +51070,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],248:[function(require,module,exports){
+},{}],252:[function(require,module,exports){
 module.exports = function(hljs) {
   var KEYWORDS = {
     keyword:
@@ -50712,7 +51168,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],249:[function(require,module,exports){
+},{}],253:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     keywords: {
@@ -50767,7 +51223,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],250:[function(require,module,exports){
+},{}],254:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['vb'],
@@ -50823,7 +51279,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],251:[function(require,module,exports){
+},{}],255:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     subLanguage: 'xml',
@@ -50835,7 +51291,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],252:[function(require,module,exports){
+},{}],256:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['vbs'],
@@ -50874,7 +51330,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],253:[function(require,module,exports){
+},{}],257:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     aliases: ['v'],
@@ -50924,7 +51380,7 @@ module.exports = function(hljs) {
     ]
   }; // return
 };
-},{}],254:[function(require,module,exports){
+},{}],258:[function(require,module,exports){
 module.exports = function(hljs) {
   // Regular expression for VHDL numeric literals.
 
@@ -50980,7 +51436,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],255:[function(require,module,exports){
+},{}],259:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     lexemes: /[!#@\w]+/,
@@ -51043,7 +51499,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],256:[function(require,module,exports){
+},{}],260:[function(require,module,exports){
 module.exports = function(hljs) {
   return {
     case_insensitive: true,
@@ -51179,7 +51635,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],257:[function(require,module,exports){
+},{}],261:[function(require,module,exports){
 module.exports = function(hljs) {
   var BUILTIN_MODULES =
     'ObjectLoader Animate MovieCredits Slides Filters Shading Materials LensFlare Mapping VLCAudioVideo ' +
@@ -51266,7 +51722,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],258:[function(require,module,exports){
+},{}],262:[function(require,module,exports){
 module.exports = function(hljs) {
   var XML_IDENT_RE = '[A-Za-z0-9\\._:-]+';
   var PHP = {
@@ -51369,7 +51825,7 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],259:[function(require,module,exports){
+},{}],263:[function(require,module,exports){
 module.exports = function(hljs) {
   var KEYWORDS = 'for let if while then else return where group by xquery encoding version' +
     'module namespace boundary-space preserve strip default collation base-uri ordering' +
@@ -51442,7 +51898,7 @@ module.exports = function(hljs) {
     contains: CONTAINS
   };
 };
-},{}],260:[function(require,module,exports){
+},{}],264:[function(require,module,exports){
 module.exports = function(hljs) {
   var STRING = {
     className: 'string',
@@ -51549,13 +52005,13 @@ module.exports = function(hljs) {
     ]
   };
 };
-},{}],261:[function(require,module,exports){
+},{}],265:[function(require,module,exports){
 'use strict';
 
 
 module.exports = require('./lib/');
 
-},{"./lib/":271}],262:[function(require,module,exports){
+},{"./lib/":275}],266:[function(require,module,exports){
 // HTML5 entities map: { name -> utf16string }
 //
 'use strict';
@@ -51563,7 +52019,7 @@ module.exports = require('./lib/');
 /*eslint quotes:0*/
 module.exports = require('entities/maps/entities.json');
 
-},{"entities/maps/entities.json":314}],263:[function(require,module,exports){
+},{"entities/maps/entities.json":318}],267:[function(require,module,exports){
 // List of valid html blocks names, accorting to commonmark spec
 // http://jgm.github.io/CommonMark/spec.html#html-blocks
 
@@ -51633,7 +52089,7 @@ module.exports = [
   'ul'
 ];
 
-},{}],264:[function(require,module,exports){
+},{}],268:[function(require,module,exports){
 // Regexps to match html elements
 
 'use strict';
@@ -51663,7 +52119,7 @@ var HTML_OPEN_CLOSE_TAG_RE = new RegExp('^(?:' + open_tag + '|' + close_tag + ')
 module.exports.HTML_TAG_RE = HTML_TAG_RE;
 module.exports.HTML_OPEN_CLOSE_TAG_RE = HTML_OPEN_CLOSE_TAG_RE;
 
-},{}],265:[function(require,module,exports){
+},{}],269:[function(require,module,exports){
 // List of valid url schemas, accorting to commonmark spec
 // http://jgm.github.io/CommonMark/spec.html#autolinks
 
@@ -51837,7 +52293,7 @@ module.exports = [
   'ymsgr'
 ];
 
-},{}],266:[function(require,module,exports){
+},{}],270:[function(require,module,exports){
 // Utilities
 //
 'use strict';
@@ -52114,7 +52570,7 @@ exports.isPunctChar         = isPunctChar;
 exports.escapeRE            = escapeRE;
 exports.normalizeReference  = normalizeReference;
 
-},{"./entities":262,"mdurl":320,"uc.micro":326,"uc.micro/categories/P/regex":324}],267:[function(require,module,exports){
+},{"./entities":266,"mdurl":324,"uc.micro":330,"uc.micro/categories/P/regex":328}],271:[function(require,module,exports){
 // Just a shortcut for bulk export
 'use strict';
 
@@ -52123,7 +52579,7 @@ exports.parseLinkLabel       = require('./parse_link_label');
 exports.parseLinkDestination = require('./parse_link_destination');
 exports.parseLinkTitle       = require('./parse_link_title');
 
-},{"./parse_link_destination":268,"./parse_link_label":269,"./parse_link_title":270}],268:[function(require,module,exports){
+},{"./parse_link_destination":272,"./parse_link_label":273,"./parse_link_title":274}],272:[function(require,module,exports){
 // Parse link destination
 //
 'use strict';
@@ -52204,7 +52660,7 @@ module.exports = function parseLinkDestination(str, pos, max) {
   return result;
 };
 
-},{"../common/utils":266}],269:[function(require,module,exports){
+},{"../common/utils":270}],273:[function(require,module,exports){
 // Parse link label
 //
 // this function assumes that first character ("[") already matches;
@@ -52254,7 +52710,7 @@ module.exports = function parseLinkLabel(state, start, disableNested) {
   return labelEnd;
 };
 
-},{}],270:[function(require,module,exports){
+},{}],274:[function(require,module,exports){
 // Parse link title
 //
 'use strict';
@@ -52309,7 +52765,7 @@ module.exports = function parseLinkTitle(str, pos, max) {
   return result;
 };
 
-},{"../common/utils":266}],271:[function(require,module,exports){
+},{"../common/utils":270}],275:[function(require,module,exports){
 // Main perser class
 
 'use strict';
@@ -52869,7 +53325,7 @@ MarkdownIt.prototype.renderInline = function (src, env) {
 
 module.exports = MarkdownIt;
 
-},{"./common/utils":266,"./helpers":267,"./parser_block":272,"./parser_core":273,"./parser_inline":274,"./presets/commonmark":275,"./presets/default":276,"./presets/zero":277,"./renderer":278,"linkify-it":315,"mdurl":320,"punycode":1}],272:[function(require,module,exports){
+},{"./common/utils":270,"./helpers":271,"./parser_block":276,"./parser_core":277,"./parser_inline":278,"./presets/commonmark":279,"./presets/default":280,"./presets/zero":281,"./renderer":282,"linkify-it":319,"mdurl":324,"punycode":1}],276:[function(require,module,exports){
 /** internal
  * class ParserBlock
  *
@@ -52996,7 +53452,7 @@ ParserBlock.prototype.State = require('./rules_block/state_block');
 
 module.exports = ParserBlock;
 
-},{"./ruler":279,"./rules_block/blockquote":280,"./rules_block/code":281,"./rules_block/fence":282,"./rules_block/heading":283,"./rules_block/hr":284,"./rules_block/html_block":285,"./rules_block/lheading":286,"./rules_block/list":287,"./rules_block/paragraph":288,"./rules_block/reference":289,"./rules_block/state_block":290,"./rules_block/table":291}],273:[function(require,module,exports){
+},{"./ruler":283,"./rules_block/blockquote":284,"./rules_block/code":285,"./rules_block/fence":286,"./rules_block/heading":287,"./rules_block/hr":288,"./rules_block/html_block":289,"./rules_block/lheading":290,"./rules_block/list":291,"./rules_block/paragraph":292,"./rules_block/reference":293,"./rules_block/state_block":294,"./rules_block/table":295}],277:[function(require,module,exports){
 /** internal
  * class Core
  *
@@ -53056,7 +53512,7 @@ Core.prototype.State = require('./rules_core/state_core');
 
 module.exports = Core;
 
-},{"./ruler":279,"./rules_core/block":292,"./rules_core/inline":293,"./rules_core/linkify":294,"./rules_core/normalize":295,"./rules_core/replacements":296,"./rules_core/smartquotes":297,"./rules_core/state_core":298}],274:[function(require,module,exports){
+},{"./ruler":283,"./rules_core/block":296,"./rules_core/inline":297,"./rules_core/linkify":298,"./rules_core/normalize":299,"./rules_core/replacements":300,"./rules_core/smartquotes":301,"./rules_core/state_core":302}],278:[function(require,module,exports){
 /** internal
  * class ParserInline
  *
@@ -53218,7 +53674,7 @@ ParserInline.prototype.State = require('./rules_inline/state_inline');
 
 module.exports = ParserInline;
 
-},{"./ruler":279,"./rules_inline/autolink":299,"./rules_inline/backticks":300,"./rules_inline/balance_pairs":301,"./rules_inline/emphasis":302,"./rules_inline/entity":303,"./rules_inline/escape":304,"./rules_inline/html_inline":305,"./rules_inline/image":306,"./rules_inline/link":307,"./rules_inline/newline":308,"./rules_inline/state_inline":309,"./rules_inline/strikethrough":310,"./rules_inline/text":311,"./rules_inline/text_collapse":312}],275:[function(require,module,exports){
+},{"./ruler":283,"./rules_inline/autolink":303,"./rules_inline/backticks":304,"./rules_inline/balance_pairs":305,"./rules_inline/emphasis":306,"./rules_inline/entity":307,"./rules_inline/escape":308,"./rules_inline/html_inline":309,"./rules_inline/image":310,"./rules_inline/link":311,"./rules_inline/newline":312,"./rules_inline/state_inline":313,"./rules_inline/strikethrough":314,"./rules_inline/text":315,"./rules_inline/text_collapse":316}],279:[function(require,module,exports){
 // Commonmark default options
 
 'use strict';
@@ -53299,7 +53755,7 @@ module.exports = {
   }
 };
 
-},{}],276:[function(require,module,exports){
+},{}],280:[function(require,module,exports){
 // markdown-it default options
 
 'use strict';
@@ -53341,7 +53797,7 @@ module.exports = {
   }
 };
 
-},{}],277:[function(require,module,exports){
+},{}],281:[function(require,module,exports){
 // "Zero" preset, with nothing enabled. Useful for manual configuring of simple
 // modes. For example, to parse bold/italic only.
 
@@ -53404,7 +53860,7 @@ module.exports = {
   }
 };
 
-},{}],278:[function(require,module,exports){
+},{}],282:[function(require,module,exports){
 /**
  * class Renderer
  *
@@ -53707,7 +54163,7 @@ Renderer.prototype.render = function (tokens, options, env) {
 
 module.exports = Renderer;
 
-},{"./common/utils":266}],279:[function(require,module,exports){
+},{"./common/utils":270}],283:[function(require,module,exports){
 /**
  * class Ruler
  *
@@ -54061,7 +54517,7 @@ Ruler.prototype.getRules = function (chainName) {
 
 module.exports = Ruler;
 
-},{}],280:[function(require,module,exports){
+},{}],284:[function(require,module,exports){
 // Block quotes
 
 'use strict';
@@ -54237,7 +54693,7 @@ module.exports = function blockquote(state, startLine, endLine, silent) {
   return true;
 };
 
-},{"../common/utils":266}],281:[function(require,module,exports){
+},{"../common/utils":270}],285:[function(require,module,exports){
 // Code block (4 spaces padded)
 
 'use strict';
@@ -54272,7 +54728,7 @@ module.exports = function code(state, startLine, endLine/*, silent*/) {
   return true;
 };
 
-},{}],282:[function(require,module,exports){
+},{}],286:[function(require,module,exports){
 // fences (``` lang, ~~~ lang)
 
 'use strict';
@@ -54365,7 +54821,7 @@ module.exports = function fence(state, startLine, endLine, silent) {
   return true;
 };
 
-},{}],283:[function(require,module,exports){
+},{}],287:[function(require,module,exports){
 // heading (#, ##, ...)
 
 'use strict';
@@ -54419,7 +54875,7 @@ module.exports = function heading(state, startLine, endLine, silent) {
   return true;
 };
 
-},{"../common/utils":266}],284:[function(require,module,exports){
+},{"../common/utils":270}],288:[function(require,module,exports){
 // Horizontal rule
 
 'use strict';
@@ -54463,7 +54919,7 @@ module.exports = function hr(state, startLine, endLine, silent) {
   return true;
 };
 
-},{"../common/utils":266}],285:[function(require,module,exports){
+},{"../common/utils":270}],289:[function(require,module,exports){
 // HTML block
 
 'use strict';
@@ -54536,7 +54992,7 @@ module.exports = function html_block(state, startLine, endLine, silent) {
   return true;
 };
 
-},{"../common/html_blocks":263,"../common/html_re":264}],286:[function(require,module,exports){
+},{"../common/html_blocks":267,"../common/html_re":268}],290:[function(require,module,exports){
 // lheading (---, ===)
 
 'use strict';
@@ -54588,7 +55044,7 @@ module.exports = function lheading(state, startLine, endLine/*, silent*/) {
   return true;
 };
 
-},{}],287:[function(require,module,exports){
+},{}],291:[function(require,module,exports){
 // Lists
 
 'use strict';
@@ -54889,7 +55345,7 @@ module.exports = function list(state, startLine, endLine, silent) {
   return true;
 };
 
-},{"../common/utils":266}],288:[function(require,module,exports){
+},{"../common/utils":270}],292:[function(require,module,exports){
 // Paragraph
 
 'use strict';
@@ -54938,7 +55394,7 @@ module.exports = function paragraph(state, startLine/*, endLine*/) {
   return true;
 };
 
-},{}],289:[function(require,module,exports){
+},{}],293:[function(require,module,exports){
 'use strict';
 
 
@@ -55131,7 +55587,7 @@ module.exports = function reference(state, startLine, _endLine, silent) {
   return true;
 };
 
-},{"../common/utils":266,"../helpers/parse_link_destination":268,"../helpers/parse_link_title":270}],290:[function(require,module,exports){
+},{"../common/utils":270,"../helpers/parse_link_destination":272,"../helpers/parse_link_title":274}],294:[function(require,module,exports){
 // Parser state class
 
 'use strict';
@@ -55340,7 +55796,7 @@ StateBlock.prototype.Token = Token;
 
 module.exports = StateBlock;
 
-},{"../common/utils":266,"../token":313}],291:[function(require,module,exports){
+},{"../common/utils":270,"../token":317}],295:[function(require,module,exports){
 // GFM table, non-standard
 
 'use strict';
@@ -55512,7 +55968,7 @@ module.exports = function table(state, startLine, endLine, silent) {
   return true;
 };
 
-},{}],292:[function(require,module,exports){
+},{}],296:[function(require,module,exports){
 'use strict';
 
 
@@ -55530,7 +55986,7 @@ module.exports = function block(state) {
   }
 };
 
-},{}],293:[function(require,module,exports){
+},{}],297:[function(require,module,exports){
 'use strict';
 
 module.exports = function inline(state) {
@@ -55545,7 +56001,7 @@ module.exports = function inline(state) {
   }
 };
 
-},{}],294:[function(require,module,exports){
+},{}],298:[function(require,module,exports){
 // Replace link-like texts with link nodes.
 //
 // Currently restricted by `md.validateLink()` to http/https/ftp
@@ -55680,7 +56136,7 @@ module.exports = function linkify(state) {
   }
 };
 
-},{"../common/utils":266}],295:[function(require,module,exports){
+},{"../common/utils":270}],299:[function(require,module,exports){
 // Normalize input string
 
 'use strict';
@@ -55702,7 +56158,7 @@ module.exports = function inline(state) {
   state.src = str;
 };
 
-},{}],296:[function(require,module,exports){
+},{}],300:[function(require,module,exports){
 // Simple typographyc replacements
 //
 // (c) (C) → ©
@@ -55793,7 +56249,7 @@ module.exports = function replace(state) {
   }
 };
 
-},{}],297:[function(require,module,exports){
+},{}],301:[function(require,module,exports){
 // Convert straight quotation marks to typographic ones
 //
 'use strict';
@@ -55960,7 +56416,7 @@ module.exports = function smartquotes(state) {
   }
 };
 
-},{"../common/utils":266}],298:[function(require,module,exports){
+},{"../common/utils":270}],302:[function(require,module,exports){
 // Core state object
 //
 'use strict';
@@ -55982,7 +56438,7 @@ StateCore.prototype.Token = Token;
 
 module.exports = StateCore;
 
-},{"../token":313}],299:[function(require,module,exports){
+},{"../token":317}],303:[function(require,module,exports){
 // Process autolinks '<protocol:...>'
 
 'use strict';
@@ -56060,7 +56516,7 @@ module.exports = function autolink(state, silent) {
   return false;
 };
 
-},{"../common/url_schemas":265}],300:[function(require,module,exports){
+},{"../common/url_schemas":269}],304:[function(require,module,exports){
 // Parse backticks
 
 'use strict';
@@ -56105,7 +56561,7 @@ module.exports = function backtick(state, silent) {
   return true;
 };
 
-},{}],301:[function(require,module,exports){
+},{}],305:[function(require,module,exports){
 // For each opening emphasis-like marker find a matching closing one
 //
 'use strict';
@@ -56143,7 +56599,7 @@ module.exports = function link_pairs(state) {
   }
 };
 
-},{}],302:[function(require,module,exports){
+},{}],306:[function(require,module,exports){
 // Process *this* and _that_
 //
 'use strict';
@@ -56268,7 +56724,7 @@ module.exports.postProcess = function emphasis(state) {
   }
 };
 
-},{}],303:[function(require,module,exports){
+},{}],307:[function(require,module,exports){
 // Process html entity - &#123;, &#xAF;, &quot;, ...
 
 'use strict';
@@ -56318,7 +56774,7 @@ module.exports = function entity(state, silent) {
   return true;
 };
 
-},{"../common/entities":262,"../common/utils":266}],304:[function(require,module,exports){
+},{"../common/entities":266,"../common/utils":270}],308:[function(require,module,exports){
 // Proceess escaped chars and hardbreaks
 
 'use strict';
@@ -56372,7 +56828,7 @@ module.exports = function escape(state, silent) {
   return true;
 };
 
-},{"../common/utils":266}],305:[function(require,module,exports){
+},{"../common/utils":270}],309:[function(require,module,exports){
 // Process html tags
 
 'use strict';
@@ -56421,7 +56877,7 @@ module.exports = function html_inline(state, silent) {
   return true;
 };
 
-},{"../common/html_re":264}],306:[function(require,module,exports){
+},{"../common/html_re":268}],310:[function(require,module,exports){
 // Process ![image](<src> "title")
 
 'use strict';
@@ -56580,7 +57036,7 @@ module.exports = function image(state, silent) {
   return true;
 };
 
-},{"../common/utils":266,"../helpers/parse_link_destination":268,"../helpers/parse_link_label":269,"../helpers/parse_link_title":270}],307:[function(require,module,exports){
+},{"../common/utils":270,"../helpers/parse_link_destination":272,"../helpers/parse_link_label":273,"../helpers/parse_link_title":274}],311:[function(require,module,exports){
 // Process [link](<to> "stuff")
 
 'use strict';
@@ -56736,7 +57192,7 @@ module.exports = function link(state, silent) {
   return true;
 };
 
-},{"../common/utils":266,"../helpers/parse_link_destination":268,"../helpers/parse_link_label":269,"../helpers/parse_link_title":270}],308:[function(require,module,exports){
+},{"../common/utils":270,"../helpers/parse_link_destination":272,"../helpers/parse_link_label":273,"../helpers/parse_link_title":274}],312:[function(require,module,exports){
 // Proceess '\n'
 
 'use strict';
@@ -56777,7 +57233,7 @@ module.exports = function newline(state, silent) {
   return true;
 };
 
-},{}],309:[function(require,module,exports){
+},{}],313:[function(require,module,exports){
 // Inline parser state
 
 'use strict';
@@ -56909,7 +57365,7 @@ StateInline.prototype.Token = Token;
 
 module.exports = StateInline;
 
-},{"../common/utils":266,"../token":313}],310:[function(require,module,exports){
+},{"../common/utils":270,"../token":317}],314:[function(require,module,exports){
 // ~~strike through~~
 //
 'use strict';
@@ -57028,7 +57484,7 @@ module.exports.postProcess = function strikethrough(state) {
   }
 };
 
-},{}],311:[function(require,module,exports){
+},{}],315:[function(require,module,exports){
 // Skip text characters for text token, place those to pending buffer
 // and increment current pos
 
@@ -57119,7 +57575,7 @@ module.exports = function text(state, silent) {
   return true;
 };*/
 
-},{}],312:[function(require,module,exports){
+},{}],316:[function(require,module,exports){
 // Merge adjacent text nodes into one, and re-calculate all token levels
 //
 'use strict';
@@ -57154,7 +57610,7 @@ module.exports = function text_collapse(state) {
   }
 };
 
-},{}],313:[function(require,module,exports){
+},{}],317:[function(require,module,exports){
 // Token class
 
 'use strict';
@@ -57305,9 +57761,9 @@ Token.prototype.attrPush = function attrPush(attrData) {
 
 module.exports = Token;
 
-},{}],314:[function(require,module,exports){
+},{}],318:[function(require,module,exports){
 module.exports={"Aacute":"\u00C1","aacute":"\u00E1","Abreve":"\u0102","abreve":"\u0103","ac":"\u223E","acd":"\u223F","acE":"\u223E\u0333","Acirc":"\u00C2","acirc":"\u00E2","acute":"\u00B4","Acy":"\u0410","acy":"\u0430","AElig":"\u00C6","aelig":"\u00E6","af":"\u2061","Afr":"\uD835\uDD04","afr":"\uD835\uDD1E","Agrave":"\u00C0","agrave":"\u00E0","alefsym":"\u2135","aleph":"\u2135","Alpha":"\u0391","alpha":"\u03B1","Amacr":"\u0100","amacr":"\u0101","amalg":"\u2A3F","amp":"&","AMP":"&","andand":"\u2A55","And":"\u2A53","and":"\u2227","andd":"\u2A5C","andslope":"\u2A58","andv":"\u2A5A","ang":"\u2220","ange":"\u29A4","angle":"\u2220","angmsdaa":"\u29A8","angmsdab":"\u29A9","angmsdac":"\u29AA","angmsdad":"\u29AB","angmsdae":"\u29AC","angmsdaf":"\u29AD","angmsdag":"\u29AE","angmsdah":"\u29AF","angmsd":"\u2221","angrt":"\u221F","angrtvb":"\u22BE","angrtvbd":"\u299D","angsph":"\u2222","angst":"\u00C5","angzarr":"\u237C","Aogon":"\u0104","aogon":"\u0105","Aopf":"\uD835\uDD38","aopf":"\uD835\uDD52","apacir":"\u2A6F","ap":"\u2248","apE":"\u2A70","ape":"\u224A","apid":"\u224B","apos":"'","ApplyFunction":"\u2061","approx":"\u2248","approxeq":"\u224A","Aring":"\u00C5","aring":"\u00E5","Ascr":"\uD835\uDC9C","ascr":"\uD835\uDCB6","Assign":"\u2254","ast":"*","asymp":"\u2248","asympeq":"\u224D","Atilde":"\u00C3","atilde":"\u00E3","Auml":"\u00C4","auml":"\u00E4","awconint":"\u2233","awint":"\u2A11","backcong":"\u224C","backepsilon":"\u03F6","backprime":"\u2035","backsim":"\u223D","backsimeq":"\u22CD","Backslash":"\u2216","Barv":"\u2AE7","barvee":"\u22BD","barwed":"\u2305","Barwed":"\u2306","barwedge":"\u2305","bbrk":"\u23B5","bbrktbrk":"\u23B6","bcong":"\u224C","Bcy":"\u0411","bcy":"\u0431","bdquo":"\u201E","becaus":"\u2235","because":"\u2235","Because":"\u2235","bemptyv":"\u29B0","bepsi":"\u03F6","bernou":"\u212C","Bernoullis":"\u212C","Beta":"\u0392","beta":"\u03B2","beth":"\u2136","between":"\u226C","Bfr":"\uD835\uDD05","bfr":"\uD835\uDD1F","bigcap":"\u22C2","bigcirc":"\u25EF","bigcup":"\u22C3","bigodot":"\u2A00","bigoplus":"\u2A01","bigotimes":"\u2A02","bigsqcup":"\u2A06","bigstar":"\u2605","bigtriangledown":"\u25BD","bigtriangleup":"\u25B3","biguplus":"\u2A04","bigvee":"\u22C1","bigwedge":"\u22C0","bkarow":"\u290D","blacklozenge":"\u29EB","blacksquare":"\u25AA","blacktriangle":"\u25B4","blacktriangledown":"\u25BE","blacktriangleleft":"\u25C2","blacktriangleright":"\u25B8","blank":"\u2423","blk12":"\u2592","blk14":"\u2591","blk34":"\u2593","block":"\u2588","bne":"=\u20E5","bnequiv":"\u2261\u20E5","bNot":"\u2AED","bnot":"\u2310","Bopf":"\uD835\uDD39","bopf":"\uD835\uDD53","bot":"\u22A5","bottom":"\u22A5","bowtie":"\u22C8","boxbox":"\u29C9","boxdl":"\u2510","boxdL":"\u2555","boxDl":"\u2556","boxDL":"\u2557","boxdr":"\u250C","boxdR":"\u2552","boxDr":"\u2553","boxDR":"\u2554","boxh":"\u2500","boxH":"\u2550","boxhd":"\u252C","boxHd":"\u2564","boxhD":"\u2565","boxHD":"\u2566","boxhu":"\u2534","boxHu":"\u2567","boxhU":"\u2568","boxHU":"\u2569","boxminus":"\u229F","boxplus":"\u229E","boxtimes":"\u22A0","boxul":"\u2518","boxuL":"\u255B","boxUl":"\u255C","boxUL":"\u255D","boxur":"\u2514","boxuR":"\u2558","boxUr":"\u2559","boxUR":"\u255A","boxv":"\u2502","boxV":"\u2551","boxvh":"\u253C","boxvH":"\u256A","boxVh":"\u256B","boxVH":"\u256C","boxvl":"\u2524","boxvL":"\u2561","boxVl":"\u2562","boxVL":"\u2563","boxvr":"\u251C","boxvR":"\u255E","boxVr":"\u255F","boxVR":"\u2560","bprime":"\u2035","breve":"\u02D8","Breve":"\u02D8","brvbar":"\u00A6","bscr":"\uD835\uDCB7","Bscr":"\u212C","bsemi":"\u204F","bsim":"\u223D","bsime":"\u22CD","bsolb":"\u29C5","bsol":"\\","bsolhsub":"\u27C8","bull":"\u2022","bullet":"\u2022","bump":"\u224E","bumpE":"\u2AAE","bumpe":"\u224F","Bumpeq":"\u224E","bumpeq":"\u224F","Cacute":"\u0106","cacute":"\u0107","capand":"\u2A44","capbrcup":"\u2A49","capcap":"\u2A4B","cap":"\u2229","Cap":"\u22D2","capcup":"\u2A47","capdot":"\u2A40","CapitalDifferentialD":"\u2145","caps":"\u2229\uFE00","caret":"\u2041","caron":"\u02C7","Cayleys":"\u212D","ccaps":"\u2A4D","Ccaron":"\u010C","ccaron":"\u010D","Ccedil":"\u00C7","ccedil":"\u00E7","Ccirc":"\u0108","ccirc":"\u0109","Cconint":"\u2230","ccups":"\u2A4C","ccupssm":"\u2A50","Cdot":"\u010A","cdot":"\u010B","cedil":"\u00B8","Cedilla":"\u00B8","cemptyv":"\u29B2","cent":"\u00A2","centerdot":"\u00B7","CenterDot":"\u00B7","cfr":"\uD835\uDD20","Cfr":"\u212D","CHcy":"\u0427","chcy":"\u0447","check":"\u2713","checkmark":"\u2713","Chi":"\u03A7","chi":"\u03C7","circ":"\u02C6","circeq":"\u2257","circlearrowleft":"\u21BA","circlearrowright":"\u21BB","circledast":"\u229B","circledcirc":"\u229A","circleddash":"\u229D","CircleDot":"\u2299","circledR":"\u00AE","circledS":"\u24C8","CircleMinus":"\u2296","CirclePlus":"\u2295","CircleTimes":"\u2297","cir":"\u25CB","cirE":"\u29C3","cire":"\u2257","cirfnint":"\u2A10","cirmid":"\u2AEF","cirscir":"\u29C2","ClockwiseContourIntegral":"\u2232","CloseCurlyDoubleQuote":"\u201D","CloseCurlyQuote":"\u2019","clubs":"\u2663","clubsuit":"\u2663","colon":":","Colon":"\u2237","Colone":"\u2A74","colone":"\u2254","coloneq":"\u2254","comma":",","commat":"@","comp":"\u2201","compfn":"\u2218","complement":"\u2201","complexes":"\u2102","cong":"\u2245","congdot":"\u2A6D","Congruent":"\u2261","conint":"\u222E","Conint":"\u222F","ContourIntegral":"\u222E","copf":"\uD835\uDD54","Copf":"\u2102","coprod":"\u2210","Coproduct":"\u2210","copy":"\u00A9","COPY":"\u00A9","copysr":"\u2117","CounterClockwiseContourIntegral":"\u2233","crarr":"\u21B5","cross":"\u2717","Cross":"\u2A2F","Cscr":"\uD835\uDC9E","cscr":"\uD835\uDCB8","csub":"\u2ACF","csube":"\u2AD1","csup":"\u2AD0","csupe":"\u2AD2","ctdot":"\u22EF","cudarrl":"\u2938","cudarrr":"\u2935","cuepr":"\u22DE","cuesc":"\u22DF","cularr":"\u21B6","cularrp":"\u293D","cupbrcap":"\u2A48","cupcap":"\u2A46","CupCap":"\u224D","cup":"\u222A","Cup":"\u22D3","cupcup":"\u2A4A","cupdot":"\u228D","cupor":"\u2A45","cups":"\u222A\uFE00","curarr":"\u21B7","curarrm":"\u293C","curlyeqprec":"\u22DE","curlyeqsucc":"\u22DF","curlyvee":"\u22CE","curlywedge":"\u22CF","curren":"\u00A4","curvearrowleft":"\u21B6","curvearrowright":"\u21B7","cuvee":"\u22CE","cuwed":"\u22CF","cwconint":"\u2232","cwint":"\u2231","cylcty":"\u232D","dagger":"\u2020","Dagger":"\u2021","daleth":"\u2138","darr":"\u2193","Darr":"\u21A1","dArr":"\u21D3","dash":"\u2010","Dashv":"\u2AE4","dashv":"\u22A3","dbkarow":"\u290F","dblac":"\u02DD","Dcaron":"\u010E","dcaron":"\u010F","Dcy":"\u0414","dcy":"\u0434","ddagger":"\u2021","ddarr":"\u21CA","DD":"\u2145","dd":"\u2146","DDotrahd":"\u2911","ddotseq":"\u2A77","deg":"\u00B0","Del":"\u2207","Delta":"\u0394","delta":"\u03B4","demptyv":"\u29B1","dfisht":"\u297F","Dfr":"\uD835\uDD07","dfr":"\uD835\uDD21","dHar":"\u2965","dharl":"\u21C3","dharr":"\u21C2","DiacriticalAcute":"\u00B4","DiacriticalDot":"\u02D9","DiacriticalDoubleAcute":"\u02DD","DiacriticalGrave":"`","DiacriticalTilde":"\u02DC","diam":"\u22C4","diamond":"\u22C4","Diamond":"\u22C4","diamondsuit":"\u2666","diams":"\u2666","die":"\u00A8","DifferentialD":"\u2146","digamma":"\u03DD","disin":"\u22F2","div":"\u00F7","divide":"\u00F7","divideontimes":"\u22C7","divonx":"\u22C7","DJcy":"\u0402","djcy":"\u0452","dlcorn":"\u231E","dlcrop":"\u230D","dollar":"$","Dopf":"\uD835\uDD3B","dopf":"\uD835\uDD55","Dot":"\u00A8","dot":"\u02D9","DotDot":"\u20DC","doteq":"\u2250","doteqdot":"\u2251","DotEqual":"\u2250","dotminus":"\u2238","dotplus":"\u2214","dotsquare":"\u22A1","doublebarwedge":"\u2306","DoubleContourIntegral":"\u222F","DoubleDot":"\u00A8","DoubleDownArrow":"\u21D3","DoubleLeftArrow":"\u21D0","DoubleLeftRightArrow":"\u21D4","DoubleLeftTee":"\u2AE4","DoubleLongLeftArrow":"\u27F8","DoubleLongLeftRightArrow":"\u27FA","DoubleLongRightArrow":"\u27F9","DoubleRightArrow":"\u21D2","DoubleRightTee":"\u22A8","DoubleUpArrow":"\u21D1","DoubleUpDownArrow":"\u21D5","DoubleVerticalBar":"\u2225","DownArrowBar":"\u2913","downarrow":"\u2193","DownArrow":"\u2193","Downarrow":"\u21D3","DownArrowUpArrow":"\u21F5","DownBreve":"\u0311","downdownarrows":"\u21CA","downharpoonleft":"\u21C3","downharpoonright":"\u21C2","DownLeftRightVector":"\u2950","DownLeftTeeVector":"\u295E","DownLeftVectorBar":"\u2956","DownLeftVector":"\u21BD","DownRightTeeVector":"\u295F","DownRightVectorBar":"\u2957","DownRightVector":"\u21C1","DownTeeArrow":"\u21A7","DownTee":"\u22A4","drbkarow":"\u2910","drcorn":"\u231F","drcrop":"\u230C","Dscr":"\uD835\uDC9F","dscr":"\uD835\uDCB9","DScy":"\u0405","dscy":"\u0455","dsol":"\u29F6","Dstrok":"\u0110","dstrok":"\u0111","dtdot":"\u22F1","dtri":"\u25BF","dtrif":"\u25BE","duarr":"\u21F5","duhar":"\u296F","dwangle":"\u29A6","DZcy":"\u040F","dzcy":"\u045F","dzigrarr":"\u27FF","Eacute":"\u00C9","eacute":"\u00E9","easter":"\u2A6E","Ecaron":"\u011A","ecaron":"\u011B","Ecirc":"\u00CA","ecirc":"\u00EA","ecir":"\u2256","ecolon":"\u2255","Ecy":"\u042D","ecy":"\u044D","eDDot":"\u2A77","Edot":"\u0116","edot":"\u0117","eDot":"\u2251","ee":"\u2147","efDot":"\u2252","Efr":"\uD835\uDD08","efr":"\uD835\uDD22","eg":"\u2A9A","Egrave":"\u00C8","egrave":"\u00E8","egs":"\u2A96","egsdot":"\u2A98","el":"\u2A99","Element":"\u2208","elinters":"\u23E7","ell":"\u2113","els":"\u2A95","elsdot":"\u2A97","Emacr":"\u0112","emacr":"\u0113","empty":"\u2205","emptyset":"\u2205","EmptySmallSquare":"\u25FB","emptyv":"\u2205","EmptyVerySmallSquare":"\u25AB","emsp13":"\u2004","emsp14":"\u2005","emsp":"\u2003","ENG":"\u014A","eng":"\u014B","ensp":"\u2002","Eogon":"\u0118","eogon":"\u0119","Eopf":"\uD835\uDD3C","eopf":"\uD835\uDD56","epar":"\u22D5","eparsl":"\u29E3","eplus":"\u2A71","epsi":"\u03B5","Epsilon":"\u0395","epsilon":"\u03B5","epsiv":"\u03F5","eqcirc":"\u2256","eqcolon":"\u2255","eqsim":"\u2242","eqslantgtr":"\u2A96","eqslantless":"\u2A95","Equal":"\u2A75","equals":"=","EqualTilde":"\u2242","equest":"\u225F","Equilibrium":"\u21CC","equiv":"\u2261","equivDD":"\u2A78","eqvparsl":"\u29E5","erarr":"\u2971","erDot":"\u2253","escr":"\u212F","Escr":"\u2130","esdot":"\u2250","Esim":"\u2A73","esim":"\u2242","Eta":"\u0397","eta":"\u03B7","ETH":"\u00D0","eth":"\u00F0","Euml":"\u00CB","euml":"\u00EB","euro":"\u20AC","excl":"!","exist":"\u2203","Exists":"\u2203","expectation":"\u2130","exponentiale":"\u2147","ExponentialE":"\u2147","fallingdotseq":"\u2252","Fcy":"\u0424","fcy":"\u0444","female":"\u2640","ffilig":"\uFB03","fflig":"\uFB00","ffllig":"\uFB04","Ffr":"\uD835\uDD09","ffr":"\uD835\uDD23","filig":"\uFB01","FilledSmallSquare":"\u25FC","FilledVerySmallSquare":"\u25AA","fjlig":"fj","flat":"\u266D","fllig":"\uFB02","fltns":"\u25B1","fnof":"\u0192","Fopf":"\uD835\uDD3D","fopf":"\uD835\uDD57","forall":"\u2200","ForAll":"\u2200","fork":"\u22D4","forkv":"\u2AD9","Fouriertrf":"\u2131","fpartint":"\u2A0D","frac12":"\u00BD","frac13":"\u2153","frac14":"\u00BC","frac15":"\u2155","frac16":"\u2159","frac18":"\u215B","frac23":"\u2154","frac25":"\u2156","frac34":"\u00BE","frac35":"\u2157","frac38":"\u215C","frac45":"\u2158","frac56":"\u215A","frac58":"\u215D","frac78":"\u215E","frasl":"\u2044","frown":"\u2322","fscr":"\uD835\uDCBB","Fscr":"\u2131","gacute":"\u01F5","Gamma":"\u0393","gamma":"\u03B3","Gammad":"\u03DC","gammad":"\u03DD","gap":"\u2A86","Gbreve":"\u011E","gbreve":"\u011F","Gcedil":"\u0122","Gcirc":"\u011C","gcirc":"\u011D","Gcy":"\u0413","gcy":"\u0433","Gdot":"\u0120","gdot":"\u0121","ge":"\u2265","gE":"\u2267","gEl":"\u2A8C","gel":"\u22DB","geq":"\u2265","geqq":"\u2267","geqslant":"\u2A7E","gescc":"\u2AA9","ges":"\u2A7E","gesdot":"\u2A80","gesdoto":"\u2A82","gesdotol":"\u2A84","gesl":"\u22DB\uFE00","gesles":"\u2A94","Gfr":"\uD835\uDD0A","gfr":"\uD835\uDD24","gg":"\u226B","Gg":"\u22D9","ggg":"\u22D9","gimel":"\u2137","GJcy":"\u0403","gjcy":"\u0453","gla":"\u2AA5","gl":"\u2277","glE":"\u2A92","glj":"\u2AA4","gnap":"\u2A8A","gnapprox":"\u2A8A","gne":"\u2A88","gnE":"\u2269","gneq":"\u2A88","gneqq":"\u2269","gnsim":"\u22E7","Gopf":"\uD835\uDD3E","gopf":"\uD835\uDD58","grave":"`","GreaterEqual":"\u2265","GreaterEqualLess":"\u22DB","GreaterFullEqual":"\u2267","GreaterGreater":"\u2AA2","GreaterLess":"\u2277","GreaterSlantEqual":"\u2A7E","GreaterTilde":"\u2273","Gscr":"\uD835\uDCA2","gscr":"\u210A","gsim":"\u2273","gsime":"\u2A8E","gsiml":"\u2A90","gtcc":"\u2AA7","gtcir":"\u2A7A","gt":">","GT":">","Gt":"\u226B","gtdot":"\u22D7","gtlPar":"\u2995","gtquest":"\u2A7C","gtrapprox":"\u2A86","gtrarr":"\u2978","gtrdot":"\u22D7","gtreqless":"\u22DB","gtreqqless":"\u2A8C","gtrless":"\u2277","gtrsim":"\u2273","gvertneqq":"\u2269\uFE00","gvnE":"\u2269\uFE00","Hacek":"\u02C7","hairsp":"\u200A","half":"\u00BD","hamilt":"\u210B","HARDcy":"\u042A","hardcy":"\u044A","harrcir":"\u2948","harr":"\u2194","hArr":"\u21D4","harrw":"\u21AD","Hat":"^","hbar":"\u210F","Hcirc":"\u0124","hcirc":"\u0125","hearts":"\u2665","heartsuit":"\u2665","hellip":"\u2026","hercon":"\u22B9","hfr":"\uD835\uDD25","Hfr":"\u210C","HilbertSpace":"\u210B","hksearow":"\u2925","hkswarow":"\u2926","hoarr":"\u21FF","homtht":"\u223B","hookleftarrow":"\u21A9","hookrightarrow":"\u21AA","hopf":"\uD835\uDD59","Hopf":"\u210D","horbar":"\u2015","HorizontalLine":"\u2500","hscr":"\uD835\uDCBD","Hscr":"\u210B","hslash":"\u210F","Hstrok":"\u0126","hstrok":"\u0127","HumpDownHump":"\u224E","HumpEqual":"\u224F","hybull":"\u2043","hyphen":"\u2010","Iacute":"\u00CD","iacute":"\u00ED","ic":"\u2063","Icirc":"\u00CE","icirc":"\u00EE","Icy":"\u0418","icy":"\u0438","Idot":"\u0130","IEcy":"\u0415","iecy":"\u0435","iexcl":"\u00A1","iff":"\u21D4","ifr":"\uD835\uDD26","Ifr":"\u2111","Igrave":"\u00CC","igrave":"\u00EC","ii":"\u2148","iiiint":"\u2A0C","iiint":"\u222D","iinfin":"\u29DC","iiota":"\u2129","IJlig":"\u0132","ijlig":"\u0133","Imacr":"\u012A","imacr":"\u012B","image":"\u2111","ImaginaryI":"\u2148","imagline":"\u2110","imagpart":"\u2111","imath":"\u0131","Im":"\u2111","imof":"\u22B7","imped":"\u01B5","Implies":"\u21D2","incare":"\u2105","in":"\u2208","infin":"\u221E","infintie":"\u29DD","inodot":"\u0131","intcal":"\u22BA","int":"\u222B","Int":"\u222C","integers":"\u2124","Integral":"\u222B","intercal":"\u22BA","Intersection":"\u22C2","intlarhk":"\u2A17","intprod":"\u2A3C","InvisibleComma":"\u2063","InvisibleTimes":"\u2062","IOcy":"\u0401","iocy":"\u0451","Iogon":"\u012E","iogon":"\u012F","Iopf":"\uD835\uDD40","iopf":"\uD835\uDD5A","Iota":"\u0399","iota":"\u03B9","iprod":"\u2A3C","iquest":"\u00BF","iscr":"\uD835\uDCBE","Iscr":"\u2110","isin":"\u2208","isindot":"\u22F5","isinE":"\u22F9","isins":"\u22F4","isinsv":"\u22F3","isinv":"\u2208","it":"\u2062","Itilde":"\u0128","itilde":"\u0129","Iukcy":"\u0406","iukcy":"\u0456","Iuml":"\u00CF","iuml":"\u00EF","Jcirc":"\u0134","jcirc":"\u0135","Jcy":"\u0419","jcy":"\u0439","Jfr":"\uD835\uDD0D","jfr":"\uD835\uDD27","jmath":"\u0237","Jopf":"\uD835\uDD41","jopf":"\uD835\uDD5B","Jscr":"\uD835\uDCA5","jscr":"\uD835\uDCBF","Jsercy":"\u0408","jsercy":"\u0458","Jukcy":"\u0404","jukcy":"\u0454","Kappa":"\u039A","kappa":"\u03BA","kappav":"\u03F0","Kcedil":"\u0136","kcedil":"\u0137","Kcy":"\u041A","kcy":"\u043A","Kfr":"\uD835\uDD0E","kfr":"\uD835\uDD28","kgreen":"\u0138","KHcy":"\u0425","khcy":"\u0445","KJcy":"\u040C","kjcy":"\u045C","Kopf":"\uD835\uDD42","kopf":"\uD835\uDD5C","Kscr":"\uD835\uDCA6","kscr":"\uD835\uDCC0","lAarr":"\u21DA","Lacute":"\u0139","lacute":"\u013A","laemptyv":"\u29B4","lagran":"\u2112","Lambda":"\u039B","lambda":"\u03BB","lang":"\u27E8","Lang":"\u27EA","langd":"\u2991","langle":"\u27E8","lap":"\u2A85","Laplacetrf":"\u2112","laquo":"\u00AB","larrb":"\u21E4","larrbfs":"\u291F","larr":"\u2190","Larr":"\u219E","lArr":"\u21D0","larrfs":"\u291D","larrhk":"\u21A9","larrlp":"\u21AB","larrpl":"\u2939","larrsim":"\u2973","larrtl":"\u21A2","latail":"\u2919","lAtail":"\u291B","lat":"\u2AAB","late":"\u2AAD","lates":"\u2AAD\uFE00","lbarr":"\u290C","lBarr":"\u290E","lbbrk":"\u2772","lbrace":"{","lbrack":"[","lbrke":"\u298B","lbrksld":"\u298F","lbrkslu":"\u298D","Lcaron":"\u013D","lcaron":"\u013E","Lcedil":"\u013B","lcedil":"\u013C","lceil":"\u2308","lcub":"{","Lcy":"\u041B","lcy":"\u043B","ldca":"\u2936","ldquo":"\u201C","ldquor":"\u201E","ldrdhar":"\u2967","ldrushar":"\u294B","ldsh":"\u21B2","le":"\u2264","lE":"\u2266","LeftAngleBracket":"\u27E8","LeftArrowBar":"\u21E4","leftarrow":"\u2190","LeftArrow":"\u2190","Leftarrow":"\u21D0","LeftArrowRightArrow":"\u21C6","leftarrowtail":"\u21A2","LeftCeiling":"\u2308","LeftDoubleBracket":"\u27E6","LeftDownTeeVector":"\u2961","LeftDownVectorBar":"\u2959","LeftDownVector":"\u21C3","LeftFloor":"\u230A","leftharpoondown":"\u21BD","leftharpoonup":"\u21BC","leftleftarrows":"\u21C7","leftrightarrow":"\u2194","LeftRightArrow":"\u2194","Leftrightarrow":"\u21D4","leftrightarrows":"\u21C6","leftrightharpoons":"\u21CB","leftrightsquigarrow":"\u21AD","LeftRightVector":"\u294E","LeftTeeArrow":"\u21A4","LeftTee":"\u22A3","LeftTeeVector":"\u295A","leftthreetimes":"\u22CB","LeftTriangleBar":"\u29CF","LeftTriangle":"\u22B2","LeftTriangleEqual":"\u22B4","LeftUpDownVector":"\u2951","LeftUpTeeVector":"\u2960","LeftUpVectorBar":"\u2958","LeftUpVector":"\u21BF","LeftVectorBar":"\u2952","LeftVector":"\u21BC","lEg":"\u2A8B","leg":"\u22DA","leq":"\u2264","leqq":"\u2266","leqslant":"\u2A7D","lescc":"\u2AA8","les":"\u2A7D","lesdot":"\u2A7F","lesdoto":"\u2A81","lesdotor":"\u2A83","lesg":"\u22DA\uFE00","lesges":"\u2A93","lessapprox":"\u2A85","lessdot":"\u22D6","lesseqgtr":"\u22DA","lesseqqgtr":"\u2A8B","LessEqualGreater":"\u22DA","LessFullEqual":"\u2266","LessGreater":"\u2276","lessgtr":"\u2276","LessLess":"\u2AA1","lesssim":"\u2272","LessSlantEqual":"\u2A7D","LessTilde":"\u2272","lfisht":"\u297C","lfloor":"\u230A","Lfr":"\uD835\uDD0F","lfr":"\uD835\uDD29","lg":"\u2276","lgE":"\u2A91","lHar":"\u2962","lhard":"\u21BD","lharu":"\u21BC","lharul":"\u296A","lhblk":"\u2584","LJcy":"\u0409","ljcy":"\u0459","llarr":"\u21C7","ll":"\u226A","Ll":"\u22D8","llcorner":"\u231E","Lleftarrow":"\u21DA","llhard":"\u296B","lltri":"\u25FA","Lmidot":"\u013F","lmidot":"\u0140","lmoustache":"\u23B0","lmoust":"\u23B0","lnap":"\u2A89","lnapprox":"\u2A89","lne":"\u2A87","lnE":"\u2268","lneq":"\u2A87","lneqq":"\u2268","lnsim":"\u22E6","loang":"\u27EC","loarr":"\u21FD","lobrk":"\u27E6","longleftarrow":"\u27F5","LongLeftArrow":"\u27F5","Longleftarrow":"\u27F8","longleftrightarrow":"\u27F7","LongLeftRightArrow":"\u27F7","Longleftrightarrow":"\u27FA","longmapsto":"\u27FC","longrightarrow":"\u27F6","LongRightArrow":"\u27F6","Longrightarrow":"\u27F9","looparrowleft":"\u21AB","looparrowright":"\u21AC","lopar":"\u2985","Lopf":"\uD835\uDD43","lopf":"\uD835\uDD5D","loplus":"\u2A2D","lotimes":"\u2A34","lowast":"\u2217","lowbar":"_","LowerLeftArrow":"\u2199","LowerRightArrow":"\u2198","loz":"\u25CA","lozenge":"\u25CA","lozf":"\u29EB","lpar":"(","lparlt":"\u2993","lrarr":"\u21C6","lrcorner":"\u231F","lrhar":"\u21CB","lrhard":"\u296D","lrm":"\u200E","lrtri":"\u22BF","lsaquo":"\u2039","lscr":"\uD835\uDCC1","Lscr":"\u2112","lsh":"\u21B0","Lsh":"\u21B0","lsim":"\u2272","lsime":"\u2A8D","lsimg":"\u2A8F","lsqb":"[","lsquo":"\u2018","lsquor":"\u201A","Lstrok":"\u0141","lstrok":"\u0142","ltcc":"\u2AA6","ltcir":"\u2A79","lt":"<","LT":"<","Lt":"\u226A","ltdot":"\u22D6","lthree":"\u22CB","ltimes":"\u22C9","ltlarr":"\u2976","ltquest":"\u2A7B","ltri":"\u25C3","ltrie":"\u22B4","ltrif":"\u25C2","ltrPar":"\u2996","lurdshar":"\u294A","luruhar":"\u2966","lvertneqq":"\u2268\uFE00","lvnE":"\u2268\uFE00","macr":"\u00AF","male":"\u2642","malt":"\u2720","maltese":"\u2720","Map":"\u2905","map":"\u21A6","mapsto":"\u21A6","mapstodown":"\u21A7","mapstoleft":"\u21A4","mapstoup":"\u21A5","marker":"\u25AE","mcomma":"\u2A29","Mcy":"\u041C","mcy":"\u043C","mdash":"\u2014","mDDot":"\u223A","measuredangle":"\u2221","MediumSpace":"\u205F","Mellintrf":"\u2133","Mfr":"\uD835\uDD10","mfr":"\uD835\uDD2A","mho":"\u2127","micro":"\u00B5","midast":"*","midcir":"\u2AF0","mid":"\u2223","middot":"\u00B7","minusb":"\u229F","minus":"\u2212","minusd":"\u2238","minusdu":"\u2A2A","MinusPlus":"\u2213","mlcp":"\u2ADB","mldr":"\u2026","mnplus":"\u2213","models":"\u22A7","Mopf":"\uD835\uDD44","mopf":"\uD835\uDD5E","mp":"\u2213","mscr":"\uD835\uDCC2","Mscr":"\u2133","mstpos":"\u223E","Mu":"\u039C","mu":"\u03BC","multimap":"\u22B8","mumap":"\u22B8","nabla":"\u2207","Nacute":"\u0143","nacute":"\u0144","nang":"\u2220\u20D2","nap":"\u2249","napE":"\u2A70\u0338","napid":"\u224B\u0338","napos":"\u0149","napprox":"\u2249","natural":"\u266E","naturals":"\u2115","natur":"\u266E","nbsp":"\u00A0","nbump":"\u224E\u0338","nbumpe":"\u224F\u0338","ncap":"\u2A43","Ncaron":"\u0147","ncaron":"\u0148","Ncedil":"\u0145","ncedil":"\u0146","ncong":"\u2247","ncongdot":"\u2A6D\u0338","ncup":"\u2A42","Ncy":"\u041D","ncy":"\u043D","ndash":"\u2013","nearhk":"\u2924","nearr":"\u2197","neArr":"\u21D7","nearrow":"\u2197","ne":"\u2260","nedot":"\u2250\u0338","NegativeMediumSpace":"\u200B","NegativeThickSpace":"\u200B","NegativeThinSpace":"\u200B","NegativeVeryThinSpace":"\u200B","nequiv":"\u2262","nesear":"\u2928","nesim":"\u2242\u0338","NestedGreaterGreater":"\u226B","NestedLessLess":"\u226A","NewLine":"\n","nexist":"\u2204","nexists":"\u2204","Nfr":"\uD835\uDD11","nfr":"\uD835\uDD2B","ngE":"\u2267\u0338","nge":"\u2271","ngeq":"\u2271","ngeqq":"\u2267\u0338","ngeqslant":"\u2A7E\u0338","nges":"\u2A7E\u0338","nGg":"\u22D9\u0338","ngsim":"\u2275","nGt":"\u226B\u20D2","ngt":"\u226F","ngtr":"\u226F","nGtv":"\u226B\u0338","nharr":"\u21AE","nhArr":"\u21CE","nhpar":"\u2AF2","ni":"\u220B","nis":"\u22FC","nisd":"\u22FA","niv":"\u220B","NJcy":"\u040A","njcy":"\u045A","nlarr":"\u219A","nlArr":"\u21CD","nldr":"\u2025","nlE":"\u2266\u0338","nle":"\u2270","nleftarrow":"\u219A","nLeftarrow":"\u21CD","nleftrightarrow":"\u21AE","nLeftrightarrow":"\u21CE","nleq":"\u2270","nleqq":"\u2266\u0338","nleqslant":"\u2A7D\u0338","nles":"\u2A7D\u0338","nless":"\u226E","nLl":"\u22D8\u0338","nlsim":"\u2274","nLt":"\u226A\u20D2","nlt":"\u226E","nltri":"\u22EA","nltrie":"\u22EC","nLtv":"\u226A\u0338","nmid":"\u2224","NoBreak":"\u2060","NonBreakingSpace":"\u00A0","nopf":"\uD835\uDD5F","Nopf":"\u2115","Not":"\u2AEC","not":"\u00AC","NotCongruent":"\u2262","NotCupCap":"\u226D","NotDoubleVerticalBar":"\u2226","NotElement":"\u2209","NotEqual":"\u2260","NotEqualTilde":"\u2242\u0338","NotExists":"\u2204","NotGreater":"\u226F","NotGreaterEqual":"\u2271","NotGreaterFullEqual":"\u2267\u0338","NotGreaterGreater":"\u226B\u0338","NotGreaterLess":"\u2279","NotGreaterSlantEqual":"\u2A7E\u0338","NotGreaterTilde":"\u2275","NotHumpDownHump":"\u224E\u0338","NotHumpEqual":"\u224F\u0338","notin":"\u2209","notindot":"\u22F5\u0338","notinE":"\u22F9\u0338","notinva":"\u2209","notinvb":"\u22F7","notinvc":"\u22F6","NotLeftTriangleBar":"\u29CF\u0338","NotLeftTriangle":"\u22EA","NotLeftTriangleEqual":"\u22EC","NotLess":"\u226E","NotLessEqual":"\u2270","NotLessGreater":"\u2278","NotLessLess":"\u226A\u0338","NotLessSlantEqual":"\u2A7D\u0338","NotLessTilde":"\u2274","NotNestedGreaterGreater":"\u2AA2\u0338","NotNestedLessLess":"\u2AA1\u0338","notni":"\u220C","notniva":"\u220C","notnivb":"\u22FE","notnivc":"\u22FD","NotPrecedes":"\u2280","NotPrecedesEqual":"\u2AAF\u0338","NotPrecedesSlantEqual":"\u22E0","NotReverseElement":"\u220C","NotRightTriangleBar":"\u29D0\u0338","NotRightTriangle":"\u22EB","NotRightTriangleEqual":"\u22ED","NotSquareSubset":"\u228F\u0338","NotSquareSubsetEqual":"\u22E2","NotSquareSuperset":"\u2290\u0338","NotSquareSupersetEqual":"\u22E3","NotSubset":"\u2282\u20D2","NotSubsetEqual":"\u2288","NotSucceeds":"\u2281","NotSucceedsEqual":"\u2AB0\u0338","NotSucceedsSlantEqual":"\u22E1","NotSucceedsTilde":"\u227F\u0338","NotSuperset":"\u2283\u20D2","NotSupersetEqual":"\u2289","NotTilde":"\u2241","NotTildeEqual":"\u2244","NotTildeFullEqual":"\u2247","NotTildeTilde":"\u2249","NotVerticalBar":"\u2224","nparallel":"\u2226","npar":"\u2226","nparsl":"\u2AFD\u20E5","npart":"\u2202\u0338","npolint":"\u2A14","npr":"\u2280","nprcue":"\u22E0","nprec":"\u2280","npreceq":"\u2AAF\u0338","npre":"\u2AAF\u0338","nrarrc":"\u2933\u0338","nrarr":"\u219B","nrArr":"\u21CF","nrarrw":"\u219D\u0338","nrightarrow":"\u219B","nRightarrow":"\u21CF","nrtri":"\u22EB","nrtrie":"\u22ED","nsc":"\u2281","nsccue":"\u22E1","nsce":"\u2AB0\u0338","Nscr":"\uD835\uDCA9","nscr":"\uD835\uDCC3","nshortmid":"\u2224","nshortparallel":"\u2226","nsim":"\u2241","nsime":"\u2244","nsimeq":"\u2244","nsmid":"\u2224","nspar":"\u2226","nsqsube":"\u22E2","nsqsupe":"\u22E3","nsub":"\u2284","nsubE":"\u2AC5\u0338","nsube":"\u2288","nsubset":"\u2282\u20D2","nsubseteq":"\u2288","nsubseteqq":"\u2AC5\u0338","nsucc":"\u2281","nsucceq":"\u2AB0\u0338","nsup":"\u2285","nsupE":"\u2AC6\u0338","nsupe":"\u2289","nsupset":"\u2283\u20D2","nsupseteq":"\u2289","nsupseteqq":"\u2AC6\u0338","ntgl":"\u2279","Ntilde":"\u00D1","ntilde":"\u00F1","ntlg":"\u2278","ntriangleleft":"\u22EA","ntrianglelefteq":"\u22EC","ntriangleright":"\u22EB","ntrianglerighteq":"\u22ED","Nu":"\u039D","nu":"\u03BD","num":"#","numero":"\u2116","numsp":"\u2007","nvap":"\u224D\u20D2","nvdash":"\u22AC","nvDash":"\u22AD","nVdash":"\u22AE","nVDash":"\u22AF","nvge":"\u2265\u20D2","nvgt":">\u20D2","nvHarr":"\u2904","nvinfin":"\u29DE","nvlArr":"\u2902","nvle":"\u2264\u20D2","nvlt":"<\u20D2","nvltrie":"\u22B4\u20D2","nvrArr":"\u2903","nvrtrie":"\u22B5\u20D2","nvsim":"\u223C\u20D2","nwarhk":"\u2923","nwarr":"\u2196","nwArr":"\u21D6","nwarrow":"\u2196","nwnear":"\u2927","Oacute":"\u00D3","oacute":"\u00F3","oast":"\u229B","Ocirc":"\u00D4","ocirc":"\u00F4","ocir":"\u229A","Ocy":"\u041E","ocy":"\u043E","odash":"\u229D","Odblac":"\u0150","odblac":"\u0151","odiv":"\u2A38","odot":"\u2299","odsold":"\u29BC","OElig":"\u0152","oelig":"\u0153","ofcir":"\u29BF","Ofr":"\uD835\uDD12","ofr":"\uD835\uDD2C","ogon":"\u02DB","Ograve":"\u00D2","ograve":"\u00F2","ogt":"\u29C1","ohbar":"\u29B5","ohm":"\u03A9","oint":"\u222E","olarr":"\u21BA","olcir":"\u29BE","olcross":"\u29BB","oline":"\u203E","olt":"\u29C0","Omacr":"\u014C","omacr":"\u014D","Omega":"\u03A9","omega":"\u03C9","Omicron":"\u039F","omicron":"\u03BF","omid":"\u29B6","ominus":"\u2296","Oopf":"\uD835\uDD46","oopf":"\uD835\uDD60","opar":"\u29B7","OpenCurlyDoubleQuote":"\u201C","OpenCurlyQuote":"\u2018","operp":"\u29B9","oplus":"\u2295","orarr":"\u21BB","Or":"\u2A54","or":"\u2228","ord":"\u2A5D","order":"\u2134","orderof":"\u2134","ordf":"\u00AA","ordm":"\u00BA","origof":"\u22B6","oror":"\u2A56","orslope":"\u2A57","orv":"\u2A5B","oS":"\u24C8","Oscr":"\uD835\uDCAA","oscr":"\u2134","Oslash":"\u00D8","oslash":"\u00F8","osol":"\u2298","Otilde":"\u00D5","otilde":"\u00F5","otimesas":"\u2A36","Otimes":"\u2A37","otimes":"\u2297","Ouml":"\u00D6","ouml":"\u00F6","ovbar":"\u233D","OverBar":"\u203E","OverBrace":"\u23DE","OverBracket":"\u23B4","OverParenthesis":"\u23DC","para":"\u00B6","parallel":"\u2225","par":"\u2225","parsim":"\u2AF3","parsl":"\u2AFD","part":"\u2202","PartialD":"\u2202","Pcy":"\u041F","pcy":"\u043F","percnt":"%","period":".","permil":"\u2030","perp":"\u22A5","pertenk":"\u2031","Pfr":"\uD835\uDD13","pfr":"\uD835\uDD2D","Phi":"\u03A6","phi":"\u03C6","phiv":"\u03D5","phmmat":"\u2133","phone":"\u260E","Pi":"\u03A0","pi":"\u03C0","pitchfork":"\u22D4","piv":"\u03D6","planck":"\u210F","planckh":"\u210E","plankv":"\u210F","plusacir":"\u2A23","plusb":"\u229E","pluscir":"\u2A22","plus":"+","plusdo":"\u2214","plusdu":"\u2A25","pluse":"\u2A72","PlusMinus":"\u00B1","plusmn":"\u00B1","plussim":"\u2A26","plustwo":"\u2A27","pm":"\u00B1","Poincareplane":"\u210C","pointint":"\u2A15","popf":"\uD835\uDD61","Popf":"\u2119","pound":"\u00A3","prap":"\u2AB7","Pr":"\u2ABB","pr":"\u227A","prcue":"\u227C","precapprox":"\u2AB7","prec":"\u227A","preccurlyeq":"\u227C","Precedes":"\u227A","PrecedesEqual":"\u2AAF","PrecedesSlantEqual":"\u227C","PrecedesTilde":"\u227E","preceq":"\u2AAF","precnapprox":"\u2AB9","precneqq":"\u2AB5","precnsim":"\u22E8","pre":"\u2AAF","prE":"\u2AB3","precsim":"\u227E","prime":"\u2032","Prime":"\u2033","primes":"\u2119","prnap":"\u2AB9","prnE":"\u2AB5","prnsim":"\u22E8","prod":"\u220F","Product":"\u220F","profalar":"\u232E","profline":"\u2312","profsurf":"\u2313","prop":"\u221D","Proportional":"\u221D","Proportion":"\u2237","propto":"\u221D","prsim":"\u227E","prurel":"\u22B0","Pscr":"\uD835\uDCAB","pscr":"\uD835\uDCC5","Psi":"\u03A8","psi":"\u03C8","puncsp":"\u2008","Qfr":"\uD835\uDD14","qfr":"\uD835\uDD2E","qint":"\u2A0C","qopf":"\uD835\uDD62","Qopf":"\u211A","qprime":"\u2057","Qscr":"\uD835\uDCAC","qscr":"\uD835\uDCC6","quaternions":"\u210D","quatint":"\u2A16","quest":"?","questeq":"\u225F","quot":"\"","QUOT":"\"","rAarr":"\u21DB","race":"\u223D\u0331","Racute":"\u0154","racute":"\u0155","radic":"\u221A","raemptyv":"\u29B3","rang":"\u27E9","Rang":"\u27EB","rangd":"\u2992","range":"\u29A5","rangle":"\u27E9","raquo":"\u00BB","rarrap":"\u2975","rarrb":"\u21E5","rarrbfs":"\u2920","rarrc":"\u2933","rarr":"\u2192","Rarr":"\u21A0","rArr":"\u21D2","rarrfs":"\u291E","rarrhk":"\u21AA","rarrlp":"\u21AC","rarrpl":"\u2945","rarrsim":"\u2974","Rarrtl":"\u2916","rarrtl":"\u21A3","rarrw":"\u219D","ratail":"\u291A","rAtail":"\u291C","ratio":"\u2236","rationals":"\u211A","rbarr":"\u290D","rBarr":"\u290F","RBarr":"\u2910","rbbrk":"\u2773","rbrace":"}","rbrack":"]","rbrke":"\u298C","rbrksld":"\u298E","rbrkslu":"\u2990","Rcaron":"\u0158","rcaron":"\u0159","Rcedil":"\u0156","rcedil":"\u0157","rceil":"\u2309","rcub":"}","Rcy":"\u0420","rcy":"\u0440","rdca":"\u2937","rdldhar":"\u2969","rdquo":"\u201D","rdquor":"\u201D","rdsh":"\u21B3","real":"\u211C","realine":"\u211B","realpart":"\u211C","reals":"\u211D","Re":"\u211C","rect":"\u25AD","reg":"\u00AE","REG":"\u00AE","ReverseElement":"\u220B","ReverseEquilibrium":"\u21CB","ReverseUpEquilibrium":"\u296F","rfisht":"\u297D","rfloor":"\u230B","rfr":"\uD835\uDD2F","Rfr":"\u211C","rHar":"\u2964","rhard":"\u21C1","rharu":"\u21C0","rharul":"\u296C","Rho":"\u03A1","rho":"\u03C1","rhov":"\u03F1","RightAngleBracket":"\u27E9","RightArrowBar":"\u21E5","rightarrow":"\u2192","RightArrow":"\u2192","Rightarrow":"\u21D2","RightArrowLeftArrow":"\u21C4","rightarrowtail":"\u21A3","RightCeiling":"\u2309","RightDoubleBracket":"\u27E7","RightDownTeeVector":"\u295D","RightDownVectorBar":"\u2955","RightDownVector":"\u21C2","RightFloor":"\u230B","rightharpoondown":"\u21C1","rightharpoonup":"\u21C0","rightleftarrows":"\u21C4","rightleftharpoons":"\u21CC","rightrightarrows":"\u21C9","rightsquigarrow":"\u219D","RightTeeArrow":"\u21A6","RightTee":"\u22A2","RightTeeVector":"\u295B","rightthreetimes":"\u22CC","RightTriangleBar":"\u29D0","RightTriangle":"\u22B3","RightTriangleEqual":"\u22B5","RightUpDownVector":"\u294F","RightUpTeeVector":"\u295C","RightUpVectorBar":"\u2954","RightUpVector":"\u21BE","RightVectorBar":"\u2953","RightVector":"\u21C0","ring":"\u02DA","risingdotseq":"\u2253","rlarr":"\u21C4","rlhar":"\u21CC","rlm":"\u200F","rmoustache":"\u23B1","rmoust":"\u23B1","rnmid":"\u2AEE","roang":"\u27ED","roarr":"\u21FE","robrk":"\u27E7","ropar":"\u2986","ropf":"\uD835\uDD63","Ropf":"\u211D","roplus":"\u2A2E","rotimes":"\u2A35","RoundImplies":"\u2970","rpar":")","rpargt":"\u2994","rppolint":"\u2A12","rrarr":"\u21C9","Rrightarrow":"\u21DB","rsaquo":"\u203A","rscr":"\uD835\uDCC7","Rscr":"\u211B","rsh":"\u21B1","Rsh":"\u21B1","rsqb":"]","rsquo":"\u2019","rsquor":"\u2019","rthree":"\u22CC","rtimes":"\u22CA","rtri":"\u25B9","rtrie":"\u22B5","rtrif":"\u25B8","rtriltri":"\u29CE","RuleDelayed":"\u29F4","ruluhar":"\u2968","rx":"\u211E","Sacute":"\u015A","sacute":"\u015B","sbquo":"\u201A","scap":"\u2AB8","Scaron":"\u0160","scaron":"\u0161","Sc":"\u2ABC","sc":"\u227B","sccue":"\u227D","sce":"\u2AB0","scE":"\u2AB4","Scedil":"\u015E","scedil":"\u015F","Scirc":"\u015C","scirc":"\u015D","scnap":"\u2ABA","scnE":"\u2AB6","scnsim":"\u22E9","scpolint":"\u2A13","scsim":"\u227F","Scy":"\u0421","scy":"\u0441","sdotb":"\u22A1","sdot":"\u22C5","sdote":"\u2A66","searhk":"\u2925","searr":"\u2198","seArr":"\u21D8","searrow":"\u2198","sect":"\u00A7","semi":";","seswar":"\u2929","setminus":"\u2216","setmn":"\u2216","sext":"\u2736","Sfr":"\uD835\uDD16","sfr":"\uD835\uDD30","sfrown":"\u2322","sharp":"\u266F","SHCHcy":"\u0429","shchcy":"\u0449","SHcy":"\u0428","shcy":"\u0448","ShortDownArrow":"\u2193","ShortLeftArrow":"\u2190","shortmid":"\u2223","shortparallel":"\u2225","ShortRightArrow":"\u2192","ShortUpArrow":"\u2191","shy":"\u00AD","Sigma":"\u03A3","sigma":"\u03C3","sigmaf":"\u03C2","sigmav":"\u03C2","sim":"\u223C","simdot":"\u2A6A","sime":"\u2243","simeq":"\u2243","simg":"\u2A9E","simgE":"\u2AA0","siml":"\u2A9D","simlE":"\u2A9F","simne":"\u2246","simplus":"\u2A24","simrarr":"\u2972","slarr":"\u2190","SmallCircle":"\u2218","smallsetminus":"\u2216","smashp":"\u2A33","smeparsl":"\u29E4","smid":"\u2223","smile":"\u2323","smt":"\u2AAA","smte":"\u2AAC","smtes":"\u2AAC\uFE00","SOFTcy":"\u042C","softcy":"\u044C","solbar":"\u233F","solb":"\u29C4","sol":"/","Sopf":"\uD835\uDD4A","sopf":"\uD835\uDD64","spades":"\u2660","spadesuit":"\u2660","spar":"\u2225","sqcap":"\u2293","sqcaps":"\u2293\uFE00","sqcup":"\u2294","sqcups":"\u2294\uFE00","Sqrt":"\u221A","sqsub":"\u228F","sqsube":"\u2291","sqsubset":"\u228F","sqsubseteq":"\u2291","sqsup":"\u2290","sqsupe":"\u2292","sqsupset":"\u2290","sqsupseteq":"\u2292","square":"\u25A1","Square":"\u25A1","SquareIntersection":"\u2293","SquareSubset":"\u228F","SquareSubsetEqual":"\u2291","SquareSuperset":"\u2290","SquareSupersetEqual":"\u2292","SquareUnion":"\u2294","squarf":"\u25AA","squ":"\u25A1","squf":"\u25AA","srarr":"\u2192","Sscr":"\uD835\uDCAE","sscr":"\uD835\uDCC8","ssetmn":"\u2216","ssmile":"\u2323","sstarf":"\u22C6","Star":"\u22C6","star":"\u2606","starf":"\u2605","straightepsilon":"\u03F5","straightphi":"\u03D5","strns":"\u00AF","sub":"\u2282","Sub":"\u22D0","subdot":"\u2ABD","subE":"\u2AC5","sube":"\u2286","subedot":"\u2AC3","submult":"\u2AC1","subnE":"\u2ACB","subne":"\u228A","subplus":"\u2ABF","subrarr":"\u2979","subset":"\u2282","Subset":"\u22D0","subseteq":"\u2286","subseteqq":"\u2AC5","SubsetEqual":"\u2286","subsetneq":"\u228A","subsetneqq":"\u2ACB","subsim":"\u2AC7","subsub":"\u2AD5","subsup":"\u2AD3","succapprox":"\u2AB8","succ":"\u227B","succcurlyeq":"\u227D","Succeeds":"\u227B","SucceedsEqual":"\u2AB0","SucceedsSlantEqual":"\u227D","SucceedsTilde":"\u227F","succeq":"\u2AB0","succnapprox":"\u2ABA","succneqq":"\u2AB6","succnsim":"\u22E9","succsim":"\u227F","SuchThat":"\u220B","sum":"\u2211","Sum":"\u2211","sung":"\u266A","sup1":"\u00B9","sup2":"\u00B2","sup3":"\u00B3","sup":"\u2283","Sup":"\u22D1","supdot":"\u2ABE","supdsub":"\u2AD8","supE":"\u2AC6","supe":"\u2287","supedot":"\u2AC4","Superset":"\u2283","SupersetEqual":"\u2287","suphsol":"\u27C9","suphsub":"\u2AD7","suplarr":"\u297B","supmult":"\u2AC2","supnE":"\u2ACC","supne":"\u228B","supplus":"\u2AC0","supset":"\u2283","Supset":"\u22D1","supseteq":"\u2287","supseteqq":"\u2AC6","supsetneq":"\u228B","supsetneqq":"\u2ACC","supsim":"\u2AC8","supsub":"\u2AD4","supsup":"\u2AD6","swarhk":"\u2926","swarr":"\u2199","swArr":"\u21D9","swarrow":"\u2199","swnwar":"\u292A","szlig":"\u00DF","Tab":"\t","target":"\u2316","Tau":"\u03A4","tau":"\u03C4","tbrk":"\u23B4","Tcaron":"\u0164","tcaron":"\u0165","Tcedil":"\u0162","tcedil":"\u0163","Tcy":"\u0422","tcy":"\u0442","tdot":"\u20DB","telrec":"\u2315","Tfr":"\uD835\uDD17","tfr":"\uD835\uDD31","there4":"\u2234","therefore":"\u2234","Therefore":"\u2234","Theta":"\u0398","theta":"\u03B8","thetasym":"\u03D1","thetav":"\u03D1","thickapprox":"\u2248","thicksim":"\u223C","ThickSpace":"\u205F\u200A","ThinSpace":"\u2009","thinsp":"\u2009","thkap":"\u2248","thksim":"\u223C","THORN":"\u00DE","thorn":"\u00FE","tilde":"\u02DC","Tilde":"\u223C","TildeEqual":"\u2243","TildeFullEqual":"\u2245","TildeTilde":"\u2248","timesbar":"\u2A31","timesb":"\u22A0","times":"\u00D7","timesd":"\u2A30","tint":"\u222D","toea":"\u2928","topbot":"\u2336","topcir":"\u2AF1","top":"\u22A4","Topf":"\uD835\uDD4B","topf":"\uD835\uDD65","topfork":"\u2ADA","tosa":"\u2929","tprime":"\u2034","trade":"\u2122","TRADE":"\u2122","triangle":"\u25B5","triangledown":"\u25BF","triangleleft":"\u25C3","trianglelefteq":"\u22B4","triangleq":"\u225C","triangleright":"\u25B9","trianglerighteq":"\u22B5","tridot":"\u25EC","trie":"\u225C","triminus":"\u2A3A","TripleDot":"\u20DB","triplus":"\u2A39","trisb":"\u29CD","tritime":"\u2A3B","trpezium":"\u23E2","Tscr":"\uD835\uDCAF","tscr":"\uD835\uDCC9","TScy":"\u0426","tscy":"\u0446","TSHcy":"\u040B","tshcy":"\u045B","Tstrok":"\u0166","tstrok":"\u0167","twixt":"\u226C","twoheadleftarrow":"\u219E","twoheadrightarrow":"\u21A0","Uacute":"\u00DA","uacute":"\u00FA","uarr":"\u2191","Uarr":"\u219F","uArr":"\u21D1","Uarrocir":"\u2949","Ubrcy":"\u040E","ubrcy":"\u045E","Ubreve":"\u016C","ubreve":"\u016D","Ucirc":"\u00DB","ucirc":"\u00FB","Ucy":"\u0423","ucy":"\u0443","udarr":"\u21C5","Udblac":"\u0170","udblac":"\u0171","udhar":"\u296E","ufisht":"\u297E","Ufr":"\uD835\uDD18","ufr":"\uD835\uDD32","Ugrave":"\u00D9","ugrave":"\u00F9","uHar":"\u2963","uharl":"\u21BF","uharr":"\u21BE","uhblk":"\u2580","ulcorn":"\u231C","ulcorner":"\u231C","ulcrop":"\u230F","ultri":"\u25F8","Umacr":"\u016A","umacr":"\u016B","uml":"\u00A8","UnderBar":"_","UnderBrace":"\u23DF","UnderBracket":"\u23B5","UnderParenthesis":"\u23DD","Union":"\u22C3","UnionPlus":"\u228E","Uogon":"\u0172","uogon":"\u0173","Uopf":"\uD835\uDD4C","uopf":"\uD835\uDD66","UpArrowBar":"\u2912","uparrow":"\u2191","UpArrow":"\u2191","Uparrow":"\u21D1","UpArrowDownArrow":"\u21C5","updownarrow":"\u2195","UpDownArrow":"\u2195","Updownarrow":"\u21D5","UpEquilibrium":"\u296E","upharpoonleft":"\u21BF","upharpoonright":"\u21BE","uplus":"\u228E","UpperLeftArrow":"\u2196","UpperRightArrow":"\u2197","upsi":"\u03C5","Upsi":"\u03D2","upsih":"\u03D2","Upsilon":"\u03A5","upsilon":"\u03C5","UpTeeArrow":"\u21A5","UpTee":"\u22A5","upuparrows":"\u21C8","urcorn":"\u231D","urcorner":"\u231D","urcrop":"\u230E","Uring":"\u016E","uring":"\u016F","urtri":"\u25F9","Uscr":"\uD835\uDCB0","uscr":"\uD835\uDCCA","utdot":"\u22F0","Utilde":"\u0168","utilde":"\u0169","utri":"\u25B5","utrif":"\u25B4","uuarr":"\u21C8","Uuml":"\u00DC","uuml":"\u00FC","uwangle":"\u29A7","vangrt":"\u299C","varepsilon":"\u03F5","varkappa":"\u03F0","varnothing":"\u2205","varphi":"\u03D5","varpi":"\u03D6","varpropto":"\u221D","varr":"\u2195","vArr":"\u21D5","varrho":"\u03F1","varsigma":"\u03C2","varsubsetneq":"\u228A\uFE00","varsubsetneqq":"\u2ACB\uFE00","varsupsetneq":"\u228B\uFE00","varsupsetneqq":"\u2ACC\uFE00","vartheta":"\u03D1","vartriangleleft":"\u22B2","vartriangleright":"\u22B3","vBar":"\u2AE8","Vbar":"\u2AEB","vBarv":"\u2AE9","Vcy":"\u0412","vcy":"\u0432","vdash":"\u22A2","vDash":"\u22A8","Vdash":"\u22A9","VDash":"\u22AB","Vdashl":"\u2AE6","veebar":"\u22BB","vee":"\u2228","Vee":"\u22C1","veeeq":"\u225A","vellip":"\u22EE","verbar":"|","Verbar":"\u2016","vert":"|","Vert":"\u2016","VerticalBar":"\u2223","VerticalLine":"|","VerticalSeparator":"\u2758","VerticalTilde":"\u2240","VeryThinSpace":"\u200A","Vfr":"\uD835\uDD19","vfr":"\uD835\uDD33","vltri":"\u22B2","vnsub":"\u2282\u20D2","vnsup":"\u2283\u20D2","Vopf":"\uD835\uDD4D","vopf":"\uD835\uDD67","vprop":"\u221D","vrtri":"\u22B3","Vscr":"\uD835\uDCB1","vscr":"\uD835\uDCCB","vsubnE":"\u2ACB\uFE00","vsubne":"\u228A\uFE00","vsupnE":"\u2ACC\uFE00","vsupne":"\u228B\uFE00","Vvdash":"\u22AA","vzigzag":"\u299A","Wcirc":"\u0174","wcirc":"\u0175","wedbar":"\u2A5F","wedge":"\u2227","Wedge":"\u22C0","wedgeq":"\u2259","weierp":"\u2118","Wfr":"\uD835\uDD1A","wfr":"\uD835\uDD34","Wopf":"\uD835\uDD4E","wopf":"\uD835\uDD68","wp":"\u2118","wr":"\u2240","wreath":"\u2240","Wscr":"\uD835\uDCB2","wscr":"\uD835\uDCCC","xcap":"\u22C2","xcirc":"\u25EF","xcup":"\u22C3","xdtri":"\u25BD","Xfr":"\uD835\uDD1B","xfr":"\uD835\uDD35","xharr":"\u27F7","xhArr":"\u27FA","Xi":"\u039E","xi":"\u03BE","xlarr":"\u27F5","xlArr":"\u27F8","xmap":"\u27FC","xnis":"\u22FB","xodot":"\u2A00","Xopf":"\uD835\uDD4F","xopf":"\uD835\uDD69","xoplus":"\u2A01","xotime":"\u2A02","xrarr":"\u27F6","xrArr":"\u27F9","Xscr":"\uD835\uDCB3","xscr":"\uD835\uDCCD","xsqcup":"\u2A06","xuplus":"\u2A04","xutri":"\u25B3","xvee":"\u22C1","xwedge":"\u22C0","Yacute":"\u00DD","yacute":"\u00FD","YAcy":"\u042F","yacy":"\u044F","Ycirc":"\u0176","ycirc":"\u0177","Ycy":"\u042B","ycy":"\u044B","yen":"\u00A5","Yfr":"\uD835\uDD1C","yfr":"\uD835\uDD36","YIcy":"\u0407","yicy":"\u0457","Yopf":"\uD835\uDD50","yopf":"\uD835\uDD6A","Yscr":"\uD835\uDCB4","yscr":"\uD835\uDCCE","YUcy":"\u042E","yucy":"\u044E","yuml":"\u00FF","Yuml":"\u0178","Zacute":"\u0179","zacute":"\u017A","Zcaron":"\u017D","zcaron":"\u017E","Zcy":"\u0417","zcy":"\u0437","Zdot":"\u017B","zdot":"\u017C","zeetrf":"\u2128","ZeroWidthSpace":"\u200B","Zeta":"\u0396","zeta":"\u03B6","zfr":"\uD835\uDD37","Zfr":"\u2128","ZHcy":"\u0416","zhcy":"\u0436","zigrarr":"\u21DD","zopf":"\uD835\uDD6B","Zopf":"\u2124","Zscr":"\uD835\uDCB5","zscr":"\uD835\uDCCF","zwj":"\u200D","zwnj":"\u200C"}
-},{}],315:[function(require,module,exports){
+},{}],319:[function(require,module,exports){
 'use strict';
 
 
@@ -57925,7 +58381,7 @@ LinkifyIt.prototype.normalize = function normalize(match) {
 
 module.exports = LinkifyIt;
 
-},{"./lib/re":316}],316:[function(require,module,exports){
+},{"./lib/re":320}],320:[function(require,module,exports){
 'use strict';
 
 // Use direct extract instead of `regenerate` to reduse browserified size
@@ -58087,7 +58543,7 @@ exports.tpl_link_no_ip_fuzzy =
     '(^|(?![.:/\\-_@])(?:[$+<=>^`|]|' + src_ZPCc + '))' +
     '((?![$+<=>^`|])' + tpl_host_port_no_ip_fuzzy_strict + src_path + ')';
 
-},{"uc.micro/categories/Cc/regex":322,"uc.micro/categories/P/regex":324,"uc.micro/categories/Z/regex":325,"uc.micro/properties/Any/regex":327}],317:[function(require,module,exports){
+},{"uc.micro/categories/Cc/regex":326,"uc.micro/categories/P/regex":328,"uc.micro/categories/Z/regex":329,"uc.micro/properties/Any/regex":331}],321:[function(require,module,exports){
 
 'use strict';
 
@@ -58211,7 +58667,7 @@ decode.componentChars = '';
 
 module.exports = decode;
 
-},{}],318:[function(require,module,exports){
+},{}],322:[function(require,module,exports){
 
 'use strict';
 
@@ -58311,7 +58767,7 @@ encode.componentChars = "-_.!~*'()";
 
 module.exports = encode;
 
-},{}],319:[function(require,module,exports){
+},{}],323:[function(require,module,exports){
 
 'use strict';
 
@@ -58338,7 +58794,7 @@ module.exports = function format(url) {
   return result;
 };
 
-},{}],320:[function(require,module,exports){
+},{}],324:[function(require,module,exports){
 'use strict';
 
 
@@ -58347,7 +58803,7 @@ module.exports.decode = require('./decode');
 module.exports.format = require('./format');
 module.exports.parse  = require('./parse');
 
-},{"./decode":317,"./encode":318,"./format":319,"./parse":321}],321:[function(require,module,exports){
+},{"./decode":321,"./encode":322,"./format":323,"./parse":325}],325:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -58661,15 +59117,15 @@ Url.prototype.parseHost = function(host) {
 
 module.exports = urlParse;
 
-},{}],322:[function(require,module,exports){
-module.exports=/[\0-\x1F\x7F-\x9F]/
-},{}],323:[function(require,module,exports){
-module.exports=/[\xAD\u0600-\u0605\u061C\u06DD\u070F\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF\uFFF9-\uFFFB]|\uD804\uDCBD|\uD82F[\uDCA0-\uDCA3]|\uD834[\uDD73-\uDD7A]|\uDB40[\uDC01\uDC20-\uDC7F]/
-},{}],324:[function(require,module,exports){
-module.exports=/[!-#%-\*,-/:;\?@\[-\]_\{\}\xA1\xA7\xAB\xB6\xB7\xBB\xBF\u037E\u0387\u055A-\u055F\u0589\u058A\u05BE\u05C0\u05C3\u05C6\u05F3\u05F4\u0609\u060A\u060C\u060D\u061B\u061E\u061F\u066A-\u066D\u06D4\u0700-\u070D\u07F7-\u07F9\u0830-\u083E\u085E\u0964\u0965\u0970\u0AF0\u0DF4\u0E4F\u0E5A\u0E5B\u0F04-\u0F12\u0F14\u0F3A-\u0F3D\u0F85\u0FD0-\u0FD4\u0FD9\u0FDA\u104A-\u104F\u10FB\u1360-\u1368\u1400\u166D\u166E\u169B\u169C\u16EB-\u16ED\u1735\u1736\u17D4-\u17D6\u17D8-\u17DA\u1800-\u180A\u1944\u1945\u1A1E\u1A1F\u1AA0-\u1AA6\u1AA8-\u1AAD\u1B5A-\u1B60\u1BFC-\u1BFF\u1C3B-\u1C3F\u1C7E\u1C7F\u1CC0-\u1CC7\u1CD3\u2010-\u2027\u2030-\u2043\u2045-\u2051\u2053-\u205E\u207D\u207E\u208D\u208E\u2308-\u230B\u2329\u232A\u2768-\u2775\u27C5\u27C6\u27E6-\u27EF\u2983-\u2998\u29D8-\u29DB\u29FC\u29FD\u2CF9-\u2CFC\u2CFE\u2CFF\u2D70\u2E00-\u2E2E\u2E30-\u2E42\u3001-\u3003\u3008-\u3011\u3014-\u301F\u3030\u303D\u30A0\u30FB\uA4FE\uA4FF\uA60D-\uA60F\uA673\uA67E\uA6F2-\uA6F7\uA874-\uA877\uA8CE\uA8CF\uA8F8-\uA8FA\uA92E\uA92F\uA95F\uA9C1-\uA9CD\uA9DE\uA9DF\uAA5C-\uAA5F\uAADE\uAADF\uAAF0\uAAF1\uABEB\uFD3E\uFD3F\uFE10-\uFE19\uFE30-\uFE52\uFE54-\uFE61\uFE63\uFE68\uFE6A\uFE6B\uFF01-\uFF03\uFF05-\uFF0A\uFF0C-\uFF0F\uFF1A\uFF1B\uFF1F\uFF20\uFF3B-\uFF3D\uFF3F\uFF5B\uFF5D\uFF5F-\uFF65]|\uD800[\uDD00-\uDD02\uDF9F\uDFD0]|\uD801\uDD6F|\uD802[\uDC57\uDD1F\uDD3F\uDE50-\uDE58\uDE7F\uDEF0-\uDEF6\uDF39-\uDF3F\uDF99-\uDF9C]|\uD804[\uDC47-\uDC4D\uDCBB\uDCBC\uDCBE-\uDCC1\uDD40-\uDD43\uDD74\uDD75\uDDC5-\uDDC8\uDDCD\uDE38-\uDE3D]|\uD805[\uDCC6\uDDC1-\uDDC9\uDE41-\uDE43]|\uD809[\uDC70-\uDC74]|\uD81A[\uDE6E\uDE6F\uDEF5\uDF37-\uDF3B\uDF44]|\uD82F\uDC9F/
-},{}],325:[function(require,module,exports){
-module.exports=/[ \xA0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/
 },{}],326:[function(require,module,exports){
+module.exports=/[\0-\x1F\x7F-\x9F]/
+},{}],327:[function(require,module,exports){
+module.exports=/[\xAD\u0600-\u0605\u061C\u06DD\u070F\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF\uFFF9-\uFFFB]|\uD804\uDCBD|\uD82F[\uDCA0-\uDCA3]|\uD834[\uDD73-\uDD7A]|\uDB40[\uDC01\uDC20-\uDC7F]/
+},{}],328:[function(require,module,exports){
+module.exports=/[!-#%-\*,-/:;\?@\[-\]_\{\}\xA1\xA7\xAB\xB6\xB7\xBB\xBF\u037E\u0387\u055A-\u055F\u0589\u058A\u05BE\u05C0\u05C3\u05C6\u05F3\u05F4\u0609\u060A\u060C\u060D\u061B\u061E\u061F\u066A-\u066D\u06D4\u0700-\u070D\u07F7-\u07F9\u0830-\u083E\u085E\u0964\u0965\u0970\u0AF0\u0DF4\u0E4F\u0E5A\u0E5B\u0F04-\u0F12\u0F14\u0F3A-\u0F3D\u0F85\u0FD0-\u0FD4\u0FD9\u0FDA\u104A-\u104F\u10FB\u1360-\u1368\u1400\u166D\u166E\u169B\u169C\u16EB-\u16ED\u1735\u1736\u17D4-\u17D6\u17D8-\u17DA\u1800-\u180A\u1944\u1945\u1A1E\u1A1F\u1AA0-\u1AA6\u1AA8-\u1AAD\u1B5A-\u1B60\u1BFC-\u1BFF\u1C3B-\u1C3F\u1C7E\u1C7F\u1CC0-\u1CC7\u1CD3\u2010-\u2027\u2030-\u2043\u2045-\u2051\u2053-\u205E\u207D\u207E\u208D\u208E\u2308-\u230B\u2329\u232A\u2768-\u2775\u27C5\u27C6\u27E6-\u27EF\u2983-\u2998\u29D8-\u29DB\u29FC\u29FD\u2CF9-\u2CFC\u2CFE\u2CFF\u2D70\u2E00-\u2E2E\u2E30-\u2E42\u3001-\u3003\u3008-\u3011\u3014-\u301F\u3030\u303D\u30A0\u30FB\uA4FE\uA4FF\uA60D-\uA60F\uA673\uA67E\uA6F2-\uA6F7\uA874-\uA877\uA8CE\uA8CF\uA8F8-\uA8FA\uA92E\uA92F\uA95F\uA9C1-\uA9CD\uA9DE\uA9DF\uAA5C-\uAA5F\uAADE\uAADF\uAAF0\uAAF1\uABEB\uFD3E\uFD3F\uFE10-\uFE19\uFE30-\uFE52\uFE54-\uFE61\uFE63\uFE68\uFE6A\uFE6B\uFF01-\uFF03\uFF05-\uFF0A\uFF0C-\uFF0F\uFF1A\uFF1B\uFF1F\uFF20\uFF3B-\uFF3D\uFF3F\uFF5B\uFF5D\uFF5F-\uFF65]|\uD800[\uDD00-\uDD02\uDF9F\uDFD0]|\uD801\uDD6F|\uD802[\uDC57\uDD1F\uDD3F\uDE50-\uDE58\uDE7F\uDEF0-\uDEF6\uDF39-\uDF3F\uDF99-\uDF9C]|\uD804[\uDC47-\uDC4D\uDCBB\uDCBC\uDCBE-\uDCC1\uDD40-\uDD43\uDD74\uDD75\uDDC5-\uDDC8\uDDCD\uDE38-\uDE3D]|\uD805[\uDCC6\uDDC1-\uDDC9\uDE41-\uDE43]|\uD809[\uDC70-\uDC74]|\uD81A[\uDE6E\uDE6F\uDEF5\uDF37-\uDF3B\uDF44]|\uD82F\uDC9F/
+},{}],329:[function(require,module,exports){
+module.exports=/[ \xA0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/
+},{}],330:[function(require,module,exports){
 
 module.exports.Any = require('./properties/Any/regex');
 module.exports.Cc  = require('./categories/Cc/regex');
@@ -58677,9 +59133,9 @@ module.exports.Cf  = require('./categories/Cf/regex');
 module.exports.P   = require('./categories/P/regex');
 module.exports.Z   = require('./categories/Z/regex');
 
-},{"./categories/Cc/regex":322,"./categories/Cf/regex":323,"./categories/P/regex":324,"./categories/Z/regex":325,"./properties/Any/regex":327}],327:[function(require,module,exports){
+},{"./categories/Cc/regex":326,"./categories/Cf/regex":327,"./categories/P/regex":328,"./categories/Z/regex":329,"./properties/Any/regex":331}],331:[function(require,module,exports){
 module.exports=/[\0-\uD7FF\uDC00-\uFFFF]|[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDBFF]/
-},{}],328:[function(require,module,exports){
+},{}],332:[function(require,module,exports){
 //     Underscore.js 1.8.3
 //     http://underscorejs.org
 //     (c) 2009-2015 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
@@ -60229,7 +60685,7 @@ module.exports=/[\0-\uD7FF\uDC00-\uFFFF]|[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-
   }
 }.call(this));
 
-},{}],329:[function(require,module,exports){
+},{}],333:[function(require,module,exports){
 var CodeMirror = require("codemirror");
 require("codemirror/mode/meta.js");
 require("codemirror/mode/apl/apl.js");
@@ -60346,7 +60802,7 @@ CodeMirror.modeInfo.push({
 	name: "ObjectiveC", mime: "text/x-objectivec", mode: "clike", ext: ["m", "mm"], alias: ["objc", "objective-c"]
 });
 
-},{"codemirror":11,"codemirror/mode/apl/apl.js":12,"codemirror/mode/asciiarmor/asciiarmor.js":13,"codemirror/mode/asn.1/asn.1.js":14,"codemirror/mode/asterisk/asterisk.js":15,"codemirror/mode/brainfuck/brainfuck.js":16,"codemirror/mode/clike/clike.js":17,"codemirror/mode/clojure/clojure.js":18,"codemirror/mode/cmake/cmake.js":19,"codemirror/mode/cobol/cobol.js":20,"codemirror/mode/coffeescript/coffeescript.js":21,"codemirror/mode/commonlisp/commonlisp.js":22,"codemirror/mode/css/css.js":23,"codemirror/mode/cypher/cypher.js":24,"codemirror/mode/d/d.js":25,"codemirror/mode/dart/dart.js":26,"codemirror/mode/diff/diff.js":27,"codemirror/mode/django/django.js":28,"codemirror/mode/dockerfile/dockerfile.js":29,"codemirror/mode/dtd/dtd.js":30,"codemirror/mode/dylan/dylan.js":31,"codemirror/mode/ebnf/ebnf.js":32,"codemirror/mode/ecl/ecl.js":33,"codemirror/mode/eiffel/eiffel.js":34,"codemirror/mode/elm/elm.js":35,"codemirror/mode/erlang/erlang.js":36,"codemirror/mode/factor/factor.js":37,"codemirror/mode/forth/forth.js":38,"codemirror/mode/fortran/fortran.js":39,"codemirror/mode/gas/gas.js":40,"codemirror/mode/gfm/gfm.js":41,"codemirror/mode/gherkin/gherkin.js":42,"codemirror/mode/go/go.js":43,"codemirror/mode/groovy/groovy.js":44,"codemirror/mode/haml/haml.js":45,"codemirror/mode/handlebars/handlebars.js":46,"codemirror/mode/haskell/haskell.js":47,"codemirror/mode/haxe/haxe.js":48,"codemirror/mode/htmlembedded/htmlembedded.js":49,"codemirror/mode/htmlmixed/htmlmixed.js":50,"codemirror/mode/http/http.js":51,"codemirror/mode/idl/idl.js":52,"codemirror/mode/jade/jade.js":53,"codemirror/mode/javascript/javascript.js":54,"codemirror/mode/jinja2/jinja2.js":55,"codemirror/mode/julia/julia.js":56,"codemirror/mode/livescript/livescript.js":57,"codemirror/mode/lua/lua.js":58,"codemirror/mode/markdown/markdown.js":59,"codemirror/mode/mathematica/mathematica.js":60,"codemirror/mode/meta.js":61,"codemirror/mode/mirc/mirc.js":62,"codemirror/mode/mllike/mllike.js":63,"codemirror/mode/modelica/modelica.js":64,"codemirror/mode/mscgen/mscgen.js":65,"codemirror/mode/mumps/mumps.js":66,"codemirror/mode/nginx/nginx.js":67,"codemirror/mode/nsis/nsis.js":68,"codemirror/mode/ntriples/ntriples.js":69,"codemirror/mode/octave/octave.js":70,"codemirror/mode/oz/oz.js":71,"codemirror/mode/pascal/pascal.js":72,"codemirror/mode/pegjs/pegjs.js":73,"codemirror/mode/perl/perl.js":74,"codemirror/mode/php/php.js":75,"codemirror/mode/pig/pig.js":76,"codemirror/mode/properties/properties.js":77,"codemirror/mode/puppet/puppet.js":78,"codemirror/mode/python/python.js":79,"codemirror/mode/q/q.js":80,"codemirror/mode/r/r.js":81,"codemirror/mode/rpm/rpm.js":82,"codemirror/mode/rst/rst.js":83,"codemirror/mode/ruby/ruby.js":84,"codemirror/mode/rust/rust.js":85,"codemirror/mode/sass/sass.js":86,"codemirror/mode/scheme/scheme.js":87,"codemirror/mode/shell/shell.js":88,"codemirror/mode/sieve/sieve.js":89,"codemirror/mode/slim/slim.js":90,"codemirror/mode/smalltalk/smalltalk.js":91,"codemirror/mode/smarty/smarty.js":92,"codemirror/mode/solr/solr.js":93,"codemirror/mode/soy/soy.js":94,"codemirror/mode/sparql/sparql.js":95,"codemirror/mode/spreadsheet/spreadsheet.js":96,"codemirror/mode/sql/sql.js":97,"codemirror/mode/stex/stex.js":98,"codemirror/mode/stylus/stylus.js":99,"codemirror/mode/swift/swift.js":100,"codemirror/mode/tcl/tcl.js":101,"codemirror/mode/textile/textile.js":102,"codemirror/mode/tiddlywiki/tiddlywiki.js":103,"codemirror/mode/tiki/tiki.js":104,"codemirror/mode/toml/toml.js":105,"codemirror/mode/tornado/tornado.js":106,"codemirror/mode/troff/troff.js":107,"codemirror/mode/ttcn-cfg/ttcn-cfg.js":108,"codemirror/mode/ttcn/ttcn.js":109,"codemirror/mode/turtle/turtle.js":110,"codemirror/mode/twig/twig.js":111,"codemirror/mode/vb/vb.js":112,"codemirror/mode/vbscript/vbscript.js":113,"codemirror/mode/velocity/velocity.js":114,"codemirror/mode/verilog/verilog.js":115,"codemirror/mode/vhdl/vhdl.js":116,"codemirror/mode/vue/vue.js":117,"codemirror/mode/xml/xml.js":118,"codemirror/mode/xquery/xquery.js":119,"codemirror/mode/yaml/yaml.js":120,"codemirror/mode/z80/z80.js":121}],330:[function(require,module,exports){
+},{"codemirror":11,"codemirror/mode/apl/apl.js":12,"codemirror/mode/asciiarmor/asciiarmor.js":13,"codemirror/mode/asn.1/asn.1.js":14,"codemirror/mode/asterisk/asterisk.js":15,"codemirror/mode/brainfuck/brainfuck.js":16,"codemirror/mode/clike/clike.js":17,"codemirror/mode/clojure/clojure.js":18,"codemirror/mode/cmake/cmake.js":19,"codemirror/mode/cobol/cobol.js":20,"codemirror/mode/coffeescript/coffeescript.js":21,"codemirror/mode/commonlisp/commonlisp.js":22,"codemirror/mode/css/css.js":23,"codemirror/mode/cypher/cypher.js":24,"codemirror/mode/d/d.js":25,"codemirror/mode/dart/dart.js":26,"codemirror/mode/diff/diff.js":27,"codemirror/mode/django/django.js":28,"codemirror/mode/dockerfile/dockerfile.js":29,"codemirror/mode/dtd/dtd.js":30,"codemirror/mode/dylan/dylan.js":31,"codemirror/mode/ebnf/ebnf.js":32,"codemirror/mode/ecl/ecl.js":33,"codemirror/mode/eiffel/eiffel.js":34,"codemirror/mode/elm/elm.js":35,"codemirror/mode/erlang/erlang.js":36,"codemirror/mode/factor/factor.js":37,"codemirror/mode/forth/forth.js":38,"codemirror/mode/fortran/fortran.js":39,"codemirror/mode/gas/gas.js":40,"codemirror/mode/gfm/gfm.js":41,"codemirror/mode/gherkin/gherkin.js":42,"codemirror/mode/go/go.js":43,"codemirror/mode/groovy/groovy.js":44,"codemirror/mode/haml/haml.js":45,"codemirror/mode/handlebars/handlebars.js":46,"codemirror/mode/haskell/haskell.js":47,"codemirror/mode/haxe/haxe.js":48,"codemirror/mode/htmlembedded/htmlembedded.js":49,"codemirror/mode/htmlmixed/htmlmixed.js":50,"codemirror/mode/http/http.js":51,"codemirror/mode/idl/idl.js":52,"codemirror/mode/jade/jade.js":53,"codemirror/mode/javascript/javascript.js":54,"codemirror/mode/jinja2/jinja2.js":55,"codemirror/mode/julia/julia.js":56,"codemirror/mode/livescript/livescript.js":57,"codemirror/mode/lua/lua.js":58,"codemirror/mode/markdown/markdown.js":59,"codemirror/mode/mathematica/mathematica.js":60,"codemirror/mode/meta.js":61,"codemirror/mode/mirc/mirc.js":62,"codemirror/mode/mllike/mllike.js":63,"codemirror/mode/modelica/modelica.js":64,"codemirror/mode/mscgen/mscgen.js":65,"codemirror/mode/mumps/mumps.js":66,"codemirror/mode/nginx/nginx.js":67,"codemirror/mode/nsis/nsis.js":68,"codemirror/mode/ntriples/ntriples.js":69,"codemirror/mode/octave/octave.js":70,"codemirror/mode/oz/oz.js":71,"codemirror/mode/pascal/pascal.js":72,"codemirror/mode/pegjs/pegjs.js":73,"codemirror/mode/perl/perl.js":74,"codemirror/mode/php/php.js":75,"codemirror/mode/pig/pig.js":76,"codemirror/mode/properties/properties.js":77,"codemirror/mode/puppet/puppet.js":78,"codemirror/mode/python/python.js":79,"codemirror/mode/q/q.js":80,"codemirror/mode/r/r.js":81,"codemirror/mode/rpm/rpm.js":82,"codemirror/mode/rst/rst.js":83,"codemirror/mode/ruby/ruby.js":84,"codemirror/mode/rust/rust.js":85,"codemirror/mode/sass/sass.js":86,"codemirror/mode/scheme/scheme.js":87,"codemirror/mode/shell/shell.js":88,"codemirror/mode/sieve/sieve.js":89,"codemirror/mode/slim/slim.js":90,"codemirror/mode/smalltalk/smalltalk.js":91,"codemirror/mode/smarty/smarty.js":92,"codemirror/mode/solr/solr.js":93,"codemirror/mode/soy/soy.js":94,"codemirror/mode/sparql/sparql.js":95,"codemirror/mode/spreadsheet/spreadsheet.js":96,"codemirror/mode/sql/sql.js":97,"codemirror/mode/stex/stex.js":98,"codemirror/mode/stylus/stylus.js":99,"codemirror/mode/swift/swift.js":100,"codemirror/mode/tcl/tcl.js":101,"codemirror/mode/textile/textile.js":102,"codemirror/mode/tiddlywiki/tiddlywiki.js":103,"codemirror/mode/tiki/tiki.js":104,"codemirror/mode/toml/toml.js":105,"codemirror/mode/tornado/tornado.js":106,"codemirror/mode/troff/troff.js":107,"codemirror/mode/ttcn-cfg/ttcn-cfg.js":108,"codemirror/mode/ttcn/ttcn.js":109,"codemirror/mode/turtle/turtle.js":110,"codemirror/mode/twig/twig.js":111,"codemirror/mode/vb/vb.js":112,"codemirror/mode/vbscript/vbscript.js":113,"codemirror/mode/velocity/velocity.js":114,"codemirror/mode/verilog/verilog.js":115,"codemirror/mode/vhdl/vhdl.js":116,"codemirror/mode/vue/vue.js":117,"codemirror/mode/xml/xml.js":118,"codemirror/mode/xquery/xquery.js":119,"codemirror/mode/yaml/yaml.js":120,"codemirror/mode/z80/z80.js":121}],334:[function(require,module,exports){
 // CodeMirror, copyright (c) by Marijn Haverbeke and others
 // Distributed under an MIT license: http://codemirror.net/LICENSE
 
@@ -60392,7 +60848,7 @@ CodeMirror.commands.shiftTabAndUnindentMarkdownList = function (cm) {
 	}
 };
 
-},{"codemirror":11}],331:[function(require,module,exports){
+},{"codemirror":11}],335:[function(require,module,exports){
 /*global require,module*/
 "use strict";
 var CodeMirror = require("codemirror");
@@ -60421,6 +60877,7 @@ require("codemirror/mode/sql/sql.js");
 var hljs = require("highlight.js");
 var _ = require("underscore");
 var md = require("markdown-it");
+var Emitter = require("event-kit").Emitter;
 
 // Some variables
 var isMac = /Mac/.test(navigator.platform);
@@ -60766,11 +61223,13 @@ function enableSideBySide(editor) {
 		wrapper.className += " CodeMirror-sided";
 
 		// Start preview with the current text
-		preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+		//preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+		editor.updatePreview();
 
 		// Updates preview
 		editor._updatePreview = _.throttle(function() {
-			preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+			//preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+			editor.updatePreview();
 		}, 1000);
 		cm.on("update", editor._updatePreview);
 		_.defer(function() {
@@ -60840,7 +61299,8 @@ function showPreview(editor) {
 		toolbar.className += " active";
 		toolbar_div.className += " disabled-for-preview";
 		wrapper.className += " hidden-for-preview";
-		preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+		// preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+		editor.updatePreview();
 
 		// Turn off side by side if needed
 		if(/editor-preview-active-side/.test(preview.className)) {
@@ -61329,6 +61789,7 @@ function SimpleMDE(options) {
 	// Update this options
 	this.options = options;
 
+	this.emitter = new Emitter();
 
 	// Auto render
 	this.render();
@@ -61356,6 +61817,7 @@ function SimpleMDE(options) {
 			}
 		}
 	});
+
 	/*
 	this.md.use(require("markdown-it-checkbox"), {
 		divWrap: true,
@@ -61378,6 +61840,7 @@ SimpleMDE.prototype.markdown = function(text) {
 SimpleMDE.prototype.destroy = function() {
 	this.container.parentNode.removeChild(this.container);
 	this.toolbarContainer.parentNode.removeChild(this.toolbarContainer);
+	this.emitter.dispose();
 };
 
 /**
@@ -61534,7 +61997,7 @@ SimpleMDE.prototype.createSideBySide = function() {
 		wrapper.parentNode.insertBefore(preview, wrapper.nextSibling);
 	}
 
-	// Syncs scroll  editor -> preview
+	// Syncs scroll	editor -> preview
 	var cScroll = false;
 	var pScroll = false;
 	cm.on("scroll", function(v) {
@@ -61549,7 +62012,7 @@ SimpleMDE.prototype.createSideBySide = function() {
 		preview.scrollTop = move;
 	});
 
-	// Syncs scroll  preview -> editor
+	// Syncs scroll	preview -> editor
 	preview.onscroll = function() {
 		if(pScroll) {
 			pScroll = false;
@@ -61816,6 +62279,7 @@ SimpleMDE.prototype.updatePreview = function() {
 	var preview = wrapper.nextSibling;
 
 	preview.innerHTML = this.options.previewRender(this.value(), preview);
+	this.emitter.emit("did-update-preview", this);
 };
 
 SimpleMDE.prototype.getPreview = function() {
@@ -61824,7 +62288,11 @@ SimpleMDE.prototype.getPreview = function() {
 	return wrapper.nextSibling;
 };
 
+SimpleMDE.prototype.onDidUpdatePreview = function(callback) {
+	return this.emitter.on("did-update-preview", callback);
+};
+
 module.exports = SimpleMDE;
 
-},{"./codemirror/modes.js":329,"./codemirror/tablist":330,"codemirror":11,"codemirror/addon/dialog/dialog.js":2,"codemirror/addon/display/fullscreen.js":3,"codemirror/addon/display/placeholder.js":4,"codemirror/addon/edit/continuelist.js":5,"codemirror/addon/mode/overlay.js":7,"codemirror/addon/search/search.js":9,"codemirror/addon/search/searchcursor.js":10,"codemirror/mode/markdown/markdown.js":59,"highlight.js":123,"markdown-it":261,"underscore":328}]},{},[331])(331)
+},{"./codemirror/modes.js":333,"./codemirror/tablist":334,"codemirror":11,"codemirror/addon/dialog/dialog.js":2,"codemirror/addon/display/fullscreen.js":3,"codemirror/addon/display/placeholder.js":4,"codemirror/addon/edit/continuelist.js":5,"codemirror/addon/mode/overlay.js":7,"codemirror/addon/search/search.js":9,"codemirror/addon/search/searchcursor.js":10,"codemirror/mode/markdown/markdown.js":59,"event-kit":125,"highlight.js":127,"markdown-it":265,"underscore":332}]},{},[335])(335)
 });

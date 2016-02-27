@@ -1027,10 +1027,11 @@ SimpleMDE.prototype.render = function(el) {
 	};
 	keyMaps["F9"] = function() {
 		toggleSideBySide(self);
-	};/*
-	keyMaps["Esc"] = function(cm) {
-		if(cm.getOption("fullScreen")) toggleFullScreen(self);
-	};*/
+	};
+	/*
+		keyMaps["Esc"] = function(cm) {
+			if(cm.getOption("fullScreen")) toggleFullScreen(self);
+		};*/
 
 	var mode, backdrop;
 	if(options.spellChecker !== false) {
