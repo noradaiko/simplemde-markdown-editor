@@ -35,14 +35,17 @@ var shortcuts = {
 	"Cmd-B": toggleBold,
 	"Cmd-I": toggleItalic,
 	"Cmd-K": drawLink,
-	//"Cmd-H": toggleHeadingSmaller,
-	"Shift-Cmd-H": toggleHeadingBigger,
+	// "Cmd-H": toggleHeadingSmaller,
+	// "Shift-Cmd-H": toggleHeadingBigger,
 	"Cmd-Alt-I": drawImage,
 	"Cmd-'": toggleBlockquote,
-	"Cmd-Alt-L": toggleOrderedList,
-	"Cmd-L": toggleUnorderedList,
+	"Shift-Cmd-O": toggleOrderedList,
+	"Shift-Cmd-L": toggleUnorderedList,
 	"Cmd-Alt-C": toggleCodeBlock,
-	"Cmd-P": togglePreview
+	"Cmd-P": togglePreview,
+	"Shift-Cmd-P": toggleSideBySide,
+	"Shift-Cmd-H": drawHorizontalRule,
+	"Cmd-U": toggleStrikethrough
 };
 
 var isMobile = function() {
@@ -81,6 +84,7 @@ function createIcon(options, enableTooltips) {
 		if(isMac) {
 			el.title = el.title.replace("Ctrl", "⌘");
 			el.title = el.title.replace("Alt", "⌥");
+			el.title = el.title.replace("Shift", "⇧");
 		}
 	}
 
@@ -259,6 +263,14 @@ function toggleHeading2(editor) {
 function toggleHeading3(editor) {
 	var cm = editor.codemirror;
 	_toggleHeading(cm, undefined, 3);
+}
+
+/**
+ * Action for toggling heading size 4
+ */
+function toggleHeading4(editor) {
+	var cm = editor.codemirror;
+	_toggleHeading(cm, undefined, 4);
 }
 
 
@@ -553,13 +565,21 @@ function _toggleHeading(cm, direction, size) {
 					} else {
 						text = "## " + text.substr(currHeadingLevel + 1);
 					}
-				} else {
+				} else if(size == 3) {
 					if(currHeadingLevel <= 0) {
 						text = "### " + text;
 					} else if(currHeadingLevel == size) {
 						text = text.substr(currHeadingLevel + 1);
 					} else {
 						text = "### " + text.substr(currHeadingLevel + 1);
+					}
+				} else {
+					if(currHeadingLevel <= 0) {
+						text = "#### " + text;
+					} else if(currHeadingLevel == size) {
+						text = text.substr(currHeadingLevel + 1);
+					} else {
+						text = "#### " + text.substr(currHeadingLevel + 1);
 					}
 				}
 			}
@@ -753,19 +773,19 @@ var toolbarBuiltInButtons = {
 		name: "heading",
 		action: toggleHeadingSmaller,
 		className: "fa fa-header",
-		title: "Heading (Ctrl+H)"
+		title: "Heading"
 	},
 	"heading-smaller": {
 		name: "heading-smaller",
 		action: toggleHeadingSmaller,
 		className: "fa fa-header fa-header-x fa-header-smaller",
-		title: "Smaller Heading (Ctrl+H)"
+		title: "Smaller Heading"
 	},
 	"heading-bigger": {
 		name: "heading-bigger",
 		action: toggleHeadingBigger,
 		className: "fa fa-header fa-header-x fa-header-bigger",
-		title: "Bigger Heading (Shift+Ctrl+H)"
+		title: "Bigger Heading"
 	},
 	"heading-1": {
 		name: "heading-1",
@@ -785,6 +805,12 @@ var toolbarBuiltInButtons = {
 		className: "fa fa-header fa-header-x fa-header-3",
 		title: "Small Heading"
 	},
+	"heading-4": {
+		name: "heading-4",
+		action: toggleHeading4,
+		className: "fa fa-header fa-header-x fa-header-4",
+		title: "Small Heading"
+	},
 	"code": {
 		name: "code",
 		action: toggleCodeBlock,
@@ -801,13 +827,13 @@ var toolbarBuiltInButtons = {
 		name: "unordered-list",
 		action: toggleUnorderedList,
 		className: "fa fa-list-ul",
-		title: "Generic List (Ctrl+L)"
+		title: "Generic List (Shift+Ctrl+U)"
 	},
 	"ordered-list": {
 		name: "ordered-list",
 		action: toggleOrderedList,
 		className: "fa fa-list-ol",
-		title: "Numbered List (Ctrl+Alt+L)"
+		title: "Numbered List (Shift+Ctrl+O)"
 	},
 	"link": {
 		name: "link",
@@ -825,7 +851,7 @@ var toolbarBuiltInButtons = {
 		name: "horizontal-rule",
 		action: drawHorizontalRule,
 		className: "fa fa-minus",
-		title: "Insert Horizontal Line"
+		title: "Insert Horizontal Line (Shift+Ctrl+H)"
 	},
 	"preview": {
 		name: "preview",
@@ -837,7 +863,7 @@ var toolbarBuiltInButtons = {
 		name: "side-by-side",
 		action: toggleSideBySide,
 		className: "fa fa-columns no-disable no-mobile",
-		title: "Toggle Side by Side (F9)"
+		title: "Toggle Side by Side (Ctrl+Shift+P)"
 	},
 	"fullscreen": {
 		name: "fullscreen",
@@ -1324,6 +1350,7 @@ SimpleMDE.toggleHeadingBigger = toggleHeadingBigger;
 SimpleMDE.toggleHeading1 = toggleHeading1;
 SimpleMDE.toggleHeading2 = toggleHeading2;
 SimpleMDE.toggleHeading3 = toggleHeading3;
+SimpleMDE.toggleHeading4 = toggleHeading4;
 SimpleMDE.toggleCodeBlock = toggleCodeBlock;
 SimpleMDE.toggleUnorderedList = toggleUnorderedList;
 SimpleMDE.toggleOrderedList = toggleOrderedList;
@@ -1365,6 +1392,9 @@ SimpleMDE.prototype.toggleHeading2 = function() {
 };
 SimpleMDE.prototype.toggleHeading3 = function() {
 	toggleHeading3(this);
+};
+SimpleMDE.prototype.toggleHeading4 = function() {
+	toggleHeading4(this);
 };
 SimpleMDE.prototype.toggleCodeBlock = function() {
 	toggleCodeBlock(this);

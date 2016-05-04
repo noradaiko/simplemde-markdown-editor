@@ -1,3 +1,21 @@
+## `_users`
+
+ * 認証情報
+
+## `users`
+
+ * 管理者のみ読み書きできる
+ * ユーザの権限で勝手に変更されないようにするため
+ * 保存する情報
+	 - ユーザの個人情報
+	 - 支払い情報
+
+## `user-${userId}`
+
+ - ユーザ用データベース
+ - ノートやタグなど
+
+
 # SimpleMDE - Markdown Editor
 A drop-in JavaScript textarea replacement for writing beautiful and understandable Markdown. The WYSIWYG-esque editor allows users who may be less experienced with Markdown to use familiar toolbar buttons and shortcuts. In addition, the syntax is rendered while editing to clearly show the expected result. Headings are larger, emphasized words are italicized, links are underlined, etc. SimpleMDE is one of the first editors to feature both built-in autosaving and spell checking.
 
@@ -128,7 +146,7 @@ var simplemde = new SimpleMDE({
 		setTimeout(function(){
 			preview.innerHTML = customMarkdownParser(plainText);
 		}, 250);
-		
+
 		return "Loading...";
 	},
 	renderingConfig: {

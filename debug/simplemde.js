@@ -757,10 +757,12 @@
     if (val && !prev) {
       cm.on("blur", onBlur);
       cm.on("change", onChange);
+      cm.on("swapDoc", onChange);
       onChange(cm);
     } else if (!val && prev) {
       cm.off("blur", onBlur);
       cm.off("change", onChange);
+      cm.off("swapDoc", onChange);
       clearPlaceholder(cm);
       var wrapper = cm.getWrapperElement();
       wrapper.className = wrapper.className.replace(" CodeMirror-empty", "");
@@ -1406,7 +1408,10 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       persistentDialog(cm, queryDialog, q, function(query, event) {
         CodeMirror.e_stop(event);
         if (!query) return;
-        if (query != state.queryText) startSearch(cm, state, query);
+        if (query != state.queryText) {
+          startSearch(cm, state, query);
+          state.posFrom = state.posTo = cm.getCursor();
+        }
         if (hiding) hiding.style.opacity = 1
         findNext(cm, event.shiftKey, function(_, to) {
           var dialog
@@ -1478,7 +1483,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
           replaceAll(cm, query, text)
         } else {
           clearSearch(cm);
-          var cursor = getSearchCursor(cm, query, cm.getCursor());
+          var cursor = getSearchCursor(cm, query, cm.getCursor("from"));
           var advance = function() {
             var start = cursor.from(), match;
             if (!(match = cursor.findNext())) {
@@ -2453,6 +2458,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
 
   function postUpdateDisplay(cm, update) {
     var viewport = update.viewport;
+
     for (var first = true;; first = false) {
       if (!first || !cm.options.lineWrapping || update.oldDisplayWidth == displayWidth(cm)) {
         // Clip forced viewport to actual scrollable area.
@@ -2468,8 +2474,8 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       updateHeightsInViewport(cm);
       var barMeasure = measureForScrollbars(cm);
       updateSelection(cm);
-      setDocumentHeight(cm, barMeasure);
       updateScrollbars(cm, barMeasure);
+      setDocumentHeight(cm, barMeasure);
     }
 
     update.signal(cm, "update", cm);
@@ -2486,8 +2492,8 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       postUpdateDisplay(cm, update);
       var barMeasure = measureForScrollbars(cm);
       updateSelection(cm);
-      setDocumentHeight(cm, barMeasure);
       updateScrollbars(cm, barMeasure);
+      setDocumentHeight(cm, barMeasure);
       update.finish();
     }
   }
@@ -2495,8 +2501,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
   function setDocumentHeight(cm, measure) {
     cm.display.sizer.style.minHeight = measure.docHeight + "px";
     cm.display.heightForcer.style.top = measure.docHeight + "px";
-    cm.display.gutters.style.height = Math.max(measure.docHeight + cm.display.barHeight + scrollGap(cm),
-                                               measure.clientHeight) + "px";
+    cm.display.gutters.style.height = (measure.docHeight + cm.display.barHeight + scrollGap(cm)) + "px";
   }
 
   // Read the actual heights of the rendered lines, and update their
@@ -3964,13 +3969,15 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
 
         if (oldPos) {
           var near = m.find(dir < 0 ? 1 : -1), diff;
-          if (dir < 0 ? m.inclusiveRight : m.inclusiveLeft) near = movePos(doc, near, -dir, line);
+          if (dir < 0 ? m.inclusiveRight : m.inclusiveLeft)
+            near = movePos(doc, near, -dir, near && near.line == pos.line ? line : null);
           if (near && near.line == pos.line && (diff = cmp(near, oldPos)) && (dir < 0 ? diff < 0 : diff > 0))
             return skipAtomicInner(doc, near, pos, dir, mayClear);
         }
 
         var far = m.find(dir < 0 ? -1 : 1);
-        if (dir < 0 ? m.inclusiveLeft : m.inclusiveRight) far = movePos(doc, far, dir, line);
+        if (dir < 0 ? m.inclusiveLeft : m.inclusiveRight)
+          far = movePos(doc, far, dir, far.line == pos.line ? line : null);
         return far ? skipAtomicInner(doc, far, pos, dir, mayClear) : null;
       }
     }
@@ -4017,6 +4024,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     for (var i = 0; i < doc.sel.ranges.length; i++) {
       if (primary === false && i == doc.sel.primIndex) continue;
       var range = doc.sel.ranges[i];
+      if (range.from().line >= cm.display.viewTo || range.to().line < cm.display.viewFrom) continue;
       var collapsed = range.empty();
       if (collapsed || cm.options.showCursorWhenSelecting)
         drawSelectionCursor(cm, range.head, curFragment);
@@ -4818,10 +4826,10 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
 
     if (op.preparedSelection)
       cm.display.input.showSelection(op.preparedSelection);
-    if (op.updatedDisplay)
-      setDocumentHeight(cm, op.barMeasure);
     if (op.updatedDisplay || op.startHeight != cm.doc.height)
       updateScrollbars(cm, op.barMeasure);
+    if (op.updatedDisplay)
+      setDocumentHeight(cm, op.barMeasure);
 
     if (op.selectionChanged) restartBlink(cm);
 
@@ -5198,7 +5206,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       over: function(e) {if (!signalDOMEvent(cm, e)) { onDragOver(cm, e); e_stop(e); }},
       start: function(e){onDragStart(cm, e);},
       drop: operation(cm, onDrop),
-      leave: function() {clearDragCursor(cm);}
+      leave: function(e) {if (!signalDOMEvent(cm, e)) { clearDragCursor(cm); }}
     };
 
     var inp = d.input.getField();
@@ -9349,9 +9357,9 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     },
 
     posFromIndex: function(off) {
-      var ch, lineNo = this.first;
+      var ch, lineNo = this.first, sepSize = this.lineSeparator().length;
       this.iter(function(line) {
-        var sz = line.text.length + 1;
+        var sz = line.text.length + sepSize;
         if (sz > off) { ch = off; return true; }
         off -= sz;
         ++lineNo;
@@ -9362,8 +9370,9 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       coords = clipPos(this, coords);
       var index = coords.ch;
       if (coords.line < this.first || coords.ch < 0) return 0;
+      var sepSize = this.lineSeparator().length;
       this.iter(this.first, coords.line, function (line) {
-        index += line.text.length + 1;
+        index += line.text.length + sepSize;
       });
       return index;
     },
@@ -10592,7 +10601,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
 
   // THE END
 
-  CodeMirror.version = "5.12.1";
+  CodeMirror.version = "5.13.3";
 
   return CodeMirror;
 });
@@ -11442,7 +11451,7 @@ CodeMirror.defineMode("clike", function(config, parserConfig) {
       }
     }
     if (isOperatorChar.test(ch)) {
-      stream.eatWhile(isOperatorChar);
+      while (!stream.match(/^\/[\/*]/, false) && stream.eat(isOperatorChar)) {}
       return "operator";
     }
     stream.eatWhile(/[\w\$_\xa1-\uffff]/);
@@ -12009,7 +12018,7 @@ CodeMirror.defineMode("clike", function(config, parserConfig) {
 
   def("text/x-objectivec", {
     name: "clike",
-    keywords: words(cKeywords + "inline restrict _Bool _Complex _Imaginery BOOL Class bycopy byref id IMP in " +
+    keywords: words(cKeywords + "inline restrict _Bool _Complex _Imaginary BOOL Class bycopy byref id IMP in " +
                     "inout nil oneway out Protocol SEL self super atomic nonatomic retain copy readwrite readonly"),
     types: words(cTypes),
     atoms: words("YES NO NULL NILL ON OFF true false"),
@@ -12370,6 +12379,7 @@ CodeMirror.defineMode("clojure", function (options) {
 
 CodeMirror.defineMIME("text/x-clojure", "clojure");
 CodeMirror.defineMIME("text/x-clojurescript", "clojure");
+CodeMirror.defineMIME("application/edn", "clojure");
 
 });
 
@@ -14481,6 +14491,12 @@ CodeMirror.defineMode("d", function(config, parserConfig) {
           return null;
         }
         return false;
+      },
+
+      "/": function(stream, state) {
+        if (!stream.eat("*")) return false
+        state.tokenize = tokenNestedComment(1)
+        return state.tokenize(stream, state)
       }
     }
   });
@@ -14528,6 +14544,27 @@ CodeMirror.defineMode("d", function(config, parserConfig) {
     stream.eatWhile(/[\w_]/);
     state.tokenize = popInterpolationStack(state);
     return "variable";
+  }
+
+  function tokenNestedComment(depth) {
+    return function (stream, state) {
+      var ch
+      while (ch = stream.next()) {
+        if (ch == "*" && stream.eat("/")) {
+          if (depth == 1) {
+            state.tokenize = null
+            break
+          } else {
+            state.tokenize = tokenNestedComment(depth - 1)
+            return state.tokenize(stream, state)
+          }
+        } else if (ch == "/" && stream.eat("*")) {
+          state.tokenize = tokenNestedComment(depth + 1)
+          return state.tokenize(stream, state)
+        }
+      }
+      return "comment"
+    }
   }
 
   CodeMirror.registerHelper("hintWords", "application/dart", keywords.concat(atoms).concat(builtins));
@@ -14656,11 +14693,11 @@ CodeMirror.defineMIME("text/x-diff", "diff");
     }
 
     // A string can be included in either single or double quotes (this is
-    // the delimeter). Mark everything as a string until the start delimeter
+    // the delimiter). Mark everything as a string until the start delimiter
     // occurs again.
-    function inString (delimeter, previousTokenizer) {
+    function inString (delimiter, previousTokenizer) {
       return function (stream, state) {
-        if (!state.escapeNext && stream.eat(delimeter)) {
+        if (!state.escapeNext && stream.eat(delimiter)) {
           state.tokenize = previousTokenizer;
         } else {
           if (state.escapeNext) {
@@ -14670,7 +14707,7 @@ CodeMirror.defineMIME("text/x-diff", "diff");
           var ch = stream.next();
 
           // Take into account the backslash for escaping characters, such as
-          // the string delimeter.
+          // the string delimiter.
           if (ch == "\\") {
             state.escapeNext = true;
           }
@@ -14690,7 +14727,7 @@ CodeMirror.defineMIME("text/x-diff", "diff");
           return "null";
         }
 
-        // Dot folowed by a non-word character should be considered an error.
+        // Dot followed by a non-word character should be considered an error.
         if (stream.match(/\.\W+/)) {
           return "error";
         } else if (stream.eat(".")) {
@@ -14709,7 +14746,7 @@ CodeMirror.defineMIME("text/x-diff", "diff");
           return "null";
         }
 
-        // Pipe folowed by a non-word character should be considered an error.
+        // Pipe followed by a non-word character should be considered an error.
         if (stream.match(/\.\W+/)) {
           return "error";
         } else if (stream.eat("|")) {
@@ -14789,7 +14826,7 @@ CodeMirror.defineMIME("text/x-diff", "diff");
           return "null";
         }
 
-        // Dot folowed by a non-word character should be considered an error.
+        // Dot followed by a non-word character should be considered an error.
         if (stream.match(/\.\W+/)) {
           return "error";
         } else if (stream.eat(".")) {
@@ -14808,7 +14845,7 @@ CodeMirror.defineMIME("text/x-diff", "diff");
           return "null";
         }
 
-        // Pipe folowed by a non-word character should be considered an error.
+        // Pipe followed by a non-word character should be considered an error.
         if (stream.match(/\.\W+/)) {
           return "error";
         } else if (stream.eat("|")) {
@@ -15143,17 +15180,17 @@ CodeMirror.defineMode("dtd", function(config) {
 
       if( textAfter.match(/\]\s+|\]/) )n=n-1;
       else if(textAfter.substr(textAfter.length-1, textAfter.length) === ">"){
-        if(textAfter.substr(0,1) === "<")n;
-        else if( type == "doindent" && textAfter.length > 1 )n;
+        if(textAfter.substr(0,1) === "<") {}
+        else if( type == "doindent" && textAfter.length > 1 ) {}
         else if( type == "doindent")n--;
-        else if( type == ">" && textAfter.length > 1)n;
-        else if( type == "tag" && textAfter !== ">")n;
+        else if( type == ">" && textAfter.length > 1) {}
+        else if( type == "tag" && textAfter !== ">") {}
         else if( type == "tag" && state.stack[state.stack.length-1] == "rule")n--;
         else if( type == "tag")n++;
         else if( textAfter === ">" && state.stack[state.stack.length-1] == "rule" && type === ">")n--;
-        else if( textAfter === ">" && state.stack[state.stack.length-1] == "rule")n;
+        else if( textAfter === ">" && state.stack[state.stack.length-1] == "rule") {}
         else if( textAfter.substr(0,1) !== "<" && textAfter.substr(0,1) === ">" )n=n-1;
-        else if( textAfter === ">")n;
+        else if( textAfter === ">") {}
         else n=n-1;
         //over rule them all
         if(type == null || type == "]")n--;
@@ -15342,15 +15379,16 @@ CodeMirror.defineMode("dylan", function(_config) {
       } else if (stream.eat("/")) {
         stream.skipToEnd();
         return "comment";
-      } else {
-        stream.skipTo(" ");
-        return "operator";
       }
+      stream.backUp(1);
     }
     // Decimal
-    else if (/\d/.test(ch)) {
-      stream.match(/^\d*(?:\.\d*)?(?:e[+\-]?\d+)?/);
-      return "number";
+    else if (/[+\-\d\.]/.test(ch)) {
+      if (stream.match(/^[+-]?[0-9]*\.[0-9]*([esdx][+-]?[0-9]+)?/i) ||
+          stream.match(/^[+-]?[0-9]+([esdx][+-]?[0-9]+)/i) ||
+          stream.match(/^[+-]?\d+/)) {
+        return "number";
+      }
     }
     // Hash
     else if (ch == "#") {
@@ -15359,7 +15397,7 @@ CodeMirror.defineMode("dylan", function(_config) {
       ch = stream.peek();
       if (ch == '"') {
         stream.next();
-        return chain(stream, state, tokenString('"', "string-2"));
+        return chain(stream, state, tokenString('"', "string"));
       }
       // Binary number
       else if (ch == "b") {
@@ -15379,11 +15417,51 @@ CodeMirror.defineMode("dylan", function(_config) {
         stream.eatWhile(/[0-7]/);
         return "number";
       }
-      // Hash symbol
-      else {
-        stream.eatWhile(/[-a-zA-Z]/);
-        return "keyword";
+      // Token concatenation in macros
+      else if (ch == '#') {
+        stream.next();
+        return "punctuation";
       }
+      // Sequence literals
+      else if ((ch == '[') || (ch == '(')) {
+        stream.next();
+        return "bracket";
+      // Hash symbol
+      } else if (stream.match(/f|t|all-keys|include|key|next|rest/i)) {
+        return "atom";
+      } else {
+        stream.eatWhile(/[-a-zA-Z]/);
+        return "error";
+      }
+    } else if (ch == "~") {
+      stream.next();
+      ch = stream.peek();
+      if (ch == "=") {
+        stream.next();
+        ch = stream.peek();
+        if (ch == "=") {
+          stream.next();
+          return "operator";
+        }
+        return "operator";
+      }
+      return "operator";
+    } else if (ch == ":") {
+      stream.next();
+      ch = stream.peek();
+      if (ch == "=") {
+        stream.next();
+        return "operator";
+      } else if (ch == ":") {
+        stream.next();
+        return "punctuation";
+      }
+    } else if ("[](){}".indexOf(ch) != -1) {
+      stream.next();
+      return "bracket";
+    } else if (".,".indexOf(ch) != -1) {
+      stream.next();
+      return "punctuation";
     } else if (stream.match("end")) {
       return "keyword";
     }
@@ -15395,6 +15473,10 @@ CodeMirror.defineMode("dylan", function(_config) {
         })) || stream.match(pattern))
           return patternStyles[name];
       }
+    }
+    if (/[+\-*\/^=<>&|]/.test(ch)) {
+      stream.next();
+      return "operator";
     }
     if (stream.match("define")) {
       return "def";
@@ -15413,29 +15495,37 @@ CodeMirror.defineMode("dylan", function(_config) {
   }
 
   function tokenComment(stream, state) {
-    var maybeEnd = false,
-    ch;
+    var maybeEnd = false, maybeNested = false, nestedCount = 0, ch;
     while ((ch = stream.next())) {
       if (ch == "/" && maybeEnd) {
-        state.tokenize = tokenBase;
-        break;
+        if (nestedCount > 0) {
+          nestedCount--;
+        } else {
+          state.tokenize = tokenBase;
+          break;
+        }
+      } else if (ch == "*" && maybeNested) {
+        nestedCount++;
       }
       maybeEnd = (ch == "*");
+      maybeNested = (ch == "/");
     }
     return "comment";
   }
 
   function tokenString(quote, style) {
     return function(stream, state) {
-      var next, end = false;
+      var escaped = false, next, end = false;
       while ((next = stream.next()) != null) {
-        if (next == quote) {
+        if (next == quote && !escaped) {
           end = true;
           break;
         }
+        escaped = !escaped && next == "\\";
       }
-      if (end)
+      if (end || !escaped) {
         state.tokenize = tokenBase;
+      }
       return style;
     };
   }
@@ -18406,7 +18496,7 @@ CodeMirror.defineMIME("text/x-groovy", "groovy");
 })(function(CodeMirror) {
 "use strict";
 
-  // full haml mode. This handled embeded ruby and html fragments too
+  // full haml mode. This handled embedded ruby and html fragments too
   CodeMirror.defineMode("haml", function(config) {
     var htmlMode = CodeMirror.getMode(config, {name: "htmlmixed"});
     var rubyMode = CodeMirror.getMode(config, "ruby");
@@ -22465,10 +22555,8 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
         state.list = null;
       } else if (state.indentation > 0) {
         state.list = null;
-        state.listDepth = Math.floor(state.indentation / 4);
       } else { // No longer a list
         state.list = false;
-        state.listDepth = 0;
       }
     }
 
@@ -22515,7 +22603,17 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
       }
       state.indentation = stream.column() + stream.current().length;
       state.list = true;
-      state.listDepth++;
+
+      // While this list item's marker's indentation
+      // is less than the deepest list item's content's indentation,
+      // pop the deepest list item indentation off the stack.
+      while (state.listStack && stream.column() < state.listStack[state.listStack.length - 1]) {
+        state.listStack.pop();
+      }
+
+      // Add this list item's content's indentation to the stack
+      state.listStack.push(state.indentation);
+
       if (modeCfg.taskLists && stream.match(taskListRE, false)) {
         state.taskList = true;
       }
@@ -22637,7 +22735,7 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
     }
 
     if (state.list !== false) {
-      var listMod = (state.listDepth - 1) % 3;
+      var listMod = (state.listStack.length - 1) % 3;
       if (!listMod) {
         styles.push(tokenTypes.list1);
       } else if (listMod === 1) {
@@ -23013,7 +23111,7 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
         hr: false,
         taskList: false,
         list: false,
-        listDepth: 0,
+        listStack: [],
         quote: 0,
         trailingSpace: 0,
         trailingSpaceNewLine: false,
@@ -23048,7 +23146,7 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
         hr: s.hr,
         taskList: s.taskList,
         list: s.list,
-        listDepth: s.listDepth,
+        listStack: s.listStack.slice(0),
         quote: s.quote,
         indentedCode: s.indentedCode,
         trailingSpace: s.trailingSpace,
@@ -23088,11 +23186,8 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
 
         state.f = state.block;
         var indentation = stream.match(/^\s*/, true)[0].replace(/\t/g, '    ').length;
-        var difference = Math.floor((indentation - state.indentation) / 4) * 4;
-        if (difference > 4) difference = 4;
-        var adjustedIndentation = state.indentation + difference;
-        state.indentationDiff = adjustedIndentation - state.indentation;
-        state.indentation = adjustedIndentation;
+        state.indentationDiff = Math.min(indentation - state.indentation, 4);
+        state.indentation = state.indentation + state.indentationDiff;
         if (indentation > 0) return null;
       }
       return state.f(stream, state);
@@ -23318,7 +23413,7 @@ CodeMirror.defineMIME('text/x-mathematica', {
     {name: "C++", mime: "text/x-c++src", mode: "clike", ext: ["cpp", "c++", "cc", "cxx", "hpp", "h++", "hh", "hxx"], alias: ["cpp"]},
     {name: "Cobol", mime: "text/x-cobol", mode: "cobol", ext: ["cob", "cpy"]},
     {name: "C#", mime: "text/x-csharp", mode: "clike", ext: ["cs"], alias: ["csharp"]},
-    {name: "Clojure", mime: "text/x-clojure", mode: "clojure", ext: ["clj"]},
+    {name: "Clojure", mime: "text/x-clojure", mode: "clojure", ext: ["clj", "cljc", "cljx"]},
     {name: "ClojureScript", mime: "text/x-clojurescript", mode: "clojure", ext: ["cljs"]},
     {name: "Closure Stylesheets (GSS)", mime: "text/x-gss", mode: "css", ext: ["gss"]},
     {name: "CMake", mime: "text/x-cmake", mode: "cmake", ext: ["cmake", "cmake.in"], file: /^CMakeLists.txt$/},
@@ -23338,6 +23433,7 @@ CodeMirror.defineMIME('text/x-mathematica', {
     {name: "Dylan", mime: "text/x-dylan", mode: "dylan", ext: ["dylan", "dyl", "intr"]},
     {name: "EBNF", mime: "text/x-ebnf", mode: "ebnf"},
     {name: "ECL", mime: "text/x-ecl", mode: "ecl", ext: ["ecl"]},
+    {name: "edn", mime: "application/edn", mode: "clojure", ext: ["edn"]},
     {name: "Eiffel", mime: "text/x-eiffel", mode: "eiffel", ext: ["e"]},
     {name: "Elm", mime: "text/x-elm", mode: "elm", ext: ["elm"]},
     {name: "Embedded Javascript", mime: "application/x-ejs", mode: "htmlembedded", ext: ["ejs"]},
@@ -23398,7 +23494,9 @@ CodeMirror.defineMIME('text/x-mathematica', {
     {name: "Pig", mime: "text/x-pig", mode: "pig", ext: ["pig"]},
     {name: "Plain Text", mime: "text/plain", mode: "null", ext: ["txt", "text", "conf", "def", "list", "log"]},
     {name: "PLSQL", mime: "text/x-plsql", mode: "sql", ext: ["pls"]},
+    {name: "PowerShell", mime: "application/x-powershell", mode: "powershell", ext: ["ps1", "psd1", "psm1"]},
     {name: "Properties files", mime: "text/x-properties", mode: "properties", ext: ["properties", "ini", "in"], alias: ["ini", "properties"]},
+    {name: "ProtoBuf", mime: "text/x-protobuf", mode: "protobuf", ext: ["proto"]},
     {name: "Python", mime: "text/x-python", mode: "python", ext: ["py", "pyw"]},
     {name: "Puppet", mime: "text/x-puppet", mode: "puppet", ext: ["pp"]},
     {name: "Q", mime: "text/x-q", mode: "q", ext: ["q"]},
@@ -23433,7 +23531,7 @@ CodeMirror.defineMIME('text/x-mathematica', {
     {name: "Tiki wiki", mime: "text/tiki", mode: "tiki"},
     {name: "TOML", mime: "text/x-toml", mode: "toml", ext: ["toml"]},
     {name: "Tornado", mime: "text/x-tornado", mode: "tornado"},
-    {name: "troff", mime: "troff", mode: "troff", ext: ["1", "2", "3", "4", "5", "6", "7", "8", "9"]},
+    {name: "troff", mime: "text/troff", mode: "troff", ext: ["1", "2", "3", "4", "5", "6", "7", "8", "9"]},
     {name: "TTCN", mime: "text/x-ttcn", mode: "ttcn", ext: ["ttcn", "ttcn3", "ttcnpp"]},
     {name: "TTCN_CFG", mime: "text/x-ttcn-cfg", mode: "ttcn-cfg", ext: ["cfg"]},
     {name: "Turtle", mime: "text/turtle", mode: "turtle", ext: ["ttl"]},
@@ -25461,7 +25559,7 @@ CodeMirror.defineMode("pegjs", function (config) {
         inString: false,
         stringType: null,
         inComment: false,
-        inChracterClass: false,
+        inCharacterClass: false,
         braced: 0,
         lhs: true,
         localState: null
@@ -25503,15 +25601,15 @@ CodeMirror.defineMode("pegjs", function (config) {
           }
         }
         return "comment";
-      } else if (state.inChracterClass) {
-          while (state.inChracterClass && !stream.eol()) {
+      } else if (state.inCharacterClass) {
+          while (state.inCharacterClass && !stream.eol()) {
             if (!(stream.match(/^[^\]\\]+/) || stream.match(/^\\./))) {
-              state.inChracterClass = false;
+              state.inCharacterClass = false;
             }
           }
       } else if (stream.peek() === '[') {
         stream.next();
-        state.inChracterClass = true;
+        state.inCharacterClass = true;
         return 'bracket';
       } else if (stream.match(/^\/\//)) {
         stream.skipToEnd();
@@ -25821,7 +25919,7 @@ CodeMirror.defineMode("perl",function(){
                 chmod                           :1,     // - changes the permissions on a list of files
                 chomp                           :1,     // - remove a trailing record separator from a string
                 chop                            :1,     // - remove the last character from a string
-                chown                           :1,     // - change the owership on a list of files
+                chown                           :1,     // - change the ownership on a list of files
                 chr                             :1,     // - get character this number represents
                 chroot                          :1,     // - make directory new root for path lookups
                 close                           :1,     // - close file (or pipe or socket) handle
@@ -26842,7 +26940,7 @@ CodeMirror.defineMode("properties", function() {
       }
 
       if (sol) {
-        while(stream.eatSpace());
+        while(stream.eatSpace()) {}
       }
 
       var ch = stream.next();
@@ -27014,7 +27112,7 @@ CodeMirror.defineMode("puppet", function () {
     if (word && words.hasOwnProperty(word)) {
       // Negates the initial next()
       stream.backUp(1);
-      // Acutally move the stream
+      // rs move the stream
       stream.match(/[\w]+/);
       // We want to process these words differently
       // do to the importance they have in Puppet
@@ -27611,6 +27709,8 @@ CodeMirror.defineMIME("text/x-q","q");
     mod(CodeMirror);
 })(function(CodeMirror) {
 "use strict";
+
+CodeMirror.registerHelper("wordChars", "r", /[\w.]/);
 
 CodeMirror.defineMode("r", function(config) {
   function wordObj(str) {
@@ -31103,7 +31203,7 @@ CodeMirror.defineMode("sparql", function(config) {
                         "strbefore", "strafter", "year", "month", "day", "hours", "minutes", "seconds",
                         "timezone", "tz", "now", "uuid", "struuid", "md5", "sha1", "sha256", "sha384",
                         "sha512", "coalesce", "if", "strlang", "strdt", "isnumeric", "regex", "exists",
-                        "isblank", "isliteral", "a"]);
+                        "isblank", "isliteral", "a", "bind"]);
   var keywords = wordRegexp(["base", "prefix", "select", "distinct", "reduced", "construct", "describe",
                              "ask", "from", "named", "where", "order", "limit", "offset", "filter", "optional",
                              "graph", "by", "asc", "desc", "as", "having", "undef", "values", "group",
@@ -31439,7 +31539,7 @@ CodeMirror.defineMode("sql", function(config, parserConfig) {
       // ref: http://dev.mysql.com/doc/refman/5.5/en/string-literals.html
       return "keyword";
     } else if (/^[\(\),\;\[\]]/.test(ch)) {
-      // no highlightning
+      // no highlighting
       return null;
     } else if (support.commentSlashSlash && ch == "/" && stream.eat("/")) {
       // 1-line comment
@@ -31715,7 +31815,7 @@ CodeMirror.defineMode("sql", function(config, parserConfig) {
     name:       "sql",
     client:     set("appinfo arraysize autocommit autoprint autorecovery autotrace blockterminator break btitle cmdsep colsep compatibility compute concat copycommit copytypecheck define describe echo editfile embedded escape exec execute feedback flagger flush heading headsep instance linesize lno loboffset logsource long longchunksize markup native newpage numformat numwidth pagesize pause pno recsep recsepchar release repfooter repheader serveroutput shiftinout show showmode size spool sqlblanklines sqlcase sqlcode sqlcontinue sqlnumber sqlpluscompatibility sqlprefix sqlprompt sqlterminator suffix tab term termout time timing trimout trimspool ttitle underline verify version wrap"),
     keywords:   set("abort accept access add all alter and any array arraylen as asc assert assign at attributes audit authorization avg base_table begin between binary_integer body boolean by case cast char char_base check close cluster clusters colauth column comment commit compress connect connected constant constraint crash create current currval cursor data_base database date dba deallocate debugoff debugon decimal declare default definition delay delete desc digits dispose distinct do drop else elseif elsif enable end entry escape exception exception_init exchange exclusive exists exit external fast fetch file for force form from function generic goto grant group having identified if immediate in increment index indexes indicator initial initrans insert interface intersect into is key level library like limited local lock log logging long loop master maxextents maxtrans member minextents minus mislabel mode modify multiset new next no noaudit nocompress nologging noparallel not nowait number_base object of off offline on online only open option or order out package parallel partition pctfree pctincrease pctused pls_integer positive positiven pragma primary prior private privileges procedure public raise range raw read rebuild record ref references refresh release rename replace resource restrict return returning returns reverse revoke rollback row rowid rowlabel rownum rows run savepoint schema segment select separate session set share snapshot some space split sql start statement storage subtype successful synonym tabauth table tables tablespace task terminate then to trigger truncate type union unique unlimited unrecoverable unusable update use using validate value values variable view views when whenever where while with work"),
-    builtin:    set("abs acos add_months ascii asin atan atan2 average bfile bfilename bigserial bit blob ceil character chartorowid chr clob concat convert cos cosh count dec decode deref dual dump dup_val_on_index empty error exp false float floor found glb greatest hextoraw initcap instr instrb int integer isopen last_day least lenght lenghtb ln lower lpad ltrim lub make_ref max min mlslabel mod months_between natural naturaln nchar nclob new_time next_day nextval nls_charset_decl_len nls_charset_id nls_charset_name nls_initcap nls_lower nls_sort nls_upper nlssort no_data_found notfound null number numeric nvarchar2 nvl others power rawtohex real reftohex round rowcount rowidtochar rowtype rpad rtrim serial sign signtype sin sinh smallint soundex sqlcode sqlerrm sqrt stddev string substr substrb sum sysdate tan tanh to_char text to_date to_label to_multi_byte to_number to_single_byte translate true trunc uid unlogged upper user userenv varchar varchar2 variance varying vsize xml"),
+    builtin:    set("abs acos add_months ascii asin atan atan2 average bfile bfilename bigserial bit blob ceil character chartorowid chr clob concat convert cos cosh count dec decode deref dual dump dup_val_on_index empty error exp false float floor found glb greatest hextoraw initcap instr instrb int integer isopen last_day least length lengthb ln lower lpad ltrim lub make_ref max min mlslabel mod months_between natural naturaln nchar nclob new_time next_day nextval nls_charset_decl_len nls_charset_id nls_charset_name nls_initcap nls_lower nls_sort nls_upper nlssort no_data_found notfound null number numeric nvarchar2 nvl others power rawtohex real reftohex round rowcount rowidtochar rowtype rpad rtrim serial sign signtype sin sinh smallint soundex sqlcode sqlerrm sqrt stddev string substr substrb sum sysdate tan tanh to_char text to_date to_label to_multi_byte to_number to_single_byte translate true trunc uid unlogged upper user userenv varchar varchar2 variance varying vsize xml"),
     operatorChars: /^[*+\-%<>!=~]/,
     dateSQL:    set("date time timestamp"),
     support:    set("doubleQuote nCharCast zerolessFloat binaryNumber hexNumber")
@@ -33004,7 +33104,7 @@ CodeMirror.defineMode("sql", function(config, parserConfig) {
   })
 
   CodeMirror.defineMIME("text/x-swift","swift")
-})
+});
 
 },{"../../lib/codemirror":11}],101:[function(require,module,exports){
 // CodeMirror, copyright (c) by Marijn Haverbeke and others
@@ -33051,42 +33151,34 @@ CodeMirror.defineMode("tcl", function() {
       var beforeParams = state.beforeParams;
       state.beforeParams = false;
       var ch = stream.next();
-      if ((ch == '"' || ch == "'") && state.inParams)
+      if ((ch == '"' || ch == "'") && state.inParams) {
         return chain(stream, state, tokenString(ch));
-      else if (/[\[\]{}\(\),;\.]/.test(ch)) {
+      } else if (/[\[\]{}\(\),;\.]/.test(ch)) {
         if (ch == "(" && beforeParams) state.inParams = true;
         else if (ch == ")") state.inParams = false;
           return null;
-      }
-      else if (/\d/.test(ch)) {
+      } else if (/\d/.test(ch)) {
         stream.eatWhile(/[\w\.]/);
         return "number";
-      }
-      else if (ch == "#" && stream.eat("*")) {
-        return chain(stream, state, tokenComment);
-      }
-      else if (ch == "#" && stream.match(/ *\[ *\[/)) {
-        return chain(stream, state, tokenUnparsed);
-      }
-      else if (ch == "#" && stream.eat("#")) {
+      } else if (ch == "#") {
+        if (stream.eat("*"))
+          return chain(stream, state, tokenComment);
+        if (ch == "#" && stream.match(/ *\[ *\[/))
+          return chain(stream, state, tokenUnparsed);
         stream.skipToEnd();
         return "comment";
-      }
-      else if (ch == '"') {
+      } else if (ch == '"') {
         stream.skipTo(/"/);
         return "comment";
-      }
-      else if (ch == "$") {
+      } else if (ch == "$") {
         stream.eatWhile(/[$_a-z0-9A-Z\.{:]/);
         stream.eatWhile(/}/);
         state.beforeParams = true;
         return "builtin";
-      }
-      else if (isOperatorChar.test(ch)) {
+      } else if (isOperatorChar.test(ch)) {
         stream.eatWhile(isOperatorChar);
         return "comment";
-      }
-      else {
+      } else {
         stream.eatWhile(/[\w\$_{}\xa1-\uffff]/);
         var word = stream.current().toLowerCase();
         if (keywords && keywords.propertyIsEnumerable(word))
@@ -33645,7 +33737,6 @@ CodeMirror.defineMIME("text/x-tcl", "tcl");
     ! Info
     CoreVersion parameter is needed for TiddlyWiki only!
 ***/
-//{{{
 
 (function(mod) {
   if (typeof exports == "object" && typeof module == "object") // CommonJS
@@ -33661,51 +33752,42 @@ CodeMirror.defineMode("tiddlywiki", function () {
   // Tokenizer
   var textwords = {};
 
-  var keywords = function () {
-    function kw(type) {
-      return { type: type, style: "macro"};
-    }
-    return {
-      "allTags": kw('allTags'), "closeAll": kw('closeAll'), "list": kw('list'),
-      "newJournal": kw('newJournal'), "newTiddler": kw('newTiddler'),
-      "permaview": kw('permaview'), "saveChanges": kw('saveChanges'),
-      "search": kw('search'), "slider": kw('slider'),   "tabs": kw('tabs'),
-      "tag": kw('tag'), "tagging": kw('tagging'),       "tags": kw('tags'),
-      "tiddler": kw('tiddler'), "timeline": kw('timeline'),
-      "today": kw('today'), "version": kw('version'),   "option": kw('option'),
-
-      "with": kw('with'),
-      "filter": kw('filter')
-    };
-  }();
+  var keywords = {
+    "allTags": true, "closeAll": true, "list": true,
+    "newJournal": true, "newTiddler": true,
+    "permaview": true, "saveChanges": true,
+    "search": true, "slider": true, "tabs": true,
+    "tag": true, "tagging": true, "tags": true,
+    "tiddler": true, "timeline": true,
+    "today": true, "version": true, "option": true,
+    "with": true, "filter": true
+  };
 
   var isSpaceName = /[\w_\-]/i,
-  reHR = /^\-\-\-\-+$/,                                 // <hr>
-  reWikiCommentStart = /^\/\*\*\*$/,            // /***
-  reWikiCommentStop = /^\*\*\*\/$/,             // ***/
-  reBlockQuote = /^<<<$/,
+      reHR = /^\-\-\-\-+$/,                                 // <hr>
+      reWikiCommentStart = /^\/\*\*\*$/,            // /***
+      reWikiCommentStop = /^\*\*\*\/$/,             // ***/
+      reBlockQuote = /^<<<$/,
 
-  reJsCodeStart = /^\/\/\{\{\{$/,                       // //{{{ js block start
-  reJsCodeStop = /^\/\/\}\}\}$/,                        // //}}} js stop
-  reXmlCodeStart = /^<!--\{\{\{-->$/,           // xml block start
-  reXmlCodeStop = /^<!--\}\}\}-->$/,            // xml stop
+      reJsCodeStart = /^\/\/\{\{\{$/,                       // //{{{ js block start
+      reJsCodeStop = /^\/\/\}\}\}$/,                        // //}}} js stop
+      reXmlCodeStart = /^<!--\{\{\{-->$/,           // xml block start
+      reXmlCodeStop = /^<!--\}\}\}-->$/,            // xml stop
 
-  reCodeBlockStart = /^\{\{\{$/,                        // {{{ TW text div block start
-  reCodeBlockStop = /^\}\}\}$/,                 // }}} TW text stop
+      reCodeBlockStart = /^\{\{\{$/,                        // {{{ TW text div block start
+      reCodeBlockStop = /^\}\}\}$/,                 // }}} TW text stop
 
-  reUntilCodeStop = /.*?\}\}\}/;
+      reUntilCodeStop = /.*?\}\}\}/;
 
   function chain(stream, state, f) {
     state.tokenize = f;
     return f(stream, state);
   }
 
-  function jsTokenBase(stream, state) {
-    var sol = stream.sol(), ch;
+  function tokenBase(stream, state) {
+    var sol = stream.sol(), ch = stream.peek();
 
     state.block = false;        // indicates the start of a code block.
-
-    ch = stream.peek();         // don't eat, to make matching simpler
 
     // check start of  blocks
     if (sol && /[<\/\*{}\-]/.test(ch)) {
@@ -33713,21 +33795,17 @@ CodeMirror.defineMode("tiddlywiki", function () {
         state.block = true;
         return chain(stream, state, twTokenCode);
       }
-      if (stream.match(reBlockQuote)) {
+      if (stream.match(reBlockQuote))
         return 'quote';
-      }
-      if (stream.match(reWikiCommentStart) || stream.match(reWikiCommentStop)) {
+      if (stream.match(reWikiCommentStart) || stream.match(reWikiCommentStop))
         return 'comment';
-      }
-      if (stream.match(reJsCodeStart) || stream.match(reJsCodeStop) || stream.match(reXmlCodeStart) || stream.match(reXmlCodeStop)) {
+      if (stream.match(reJsCodeStart) || stream.match(reJsCodeStop) || stream.match(reXmlCodeStart) || stream.match(reXmlCodeStop))
         return 'comment';
-      }
-      if (stream.match(reHR)) {
+      if (stream.match(reHR))
         return 'hr';
-      }
-    } // sol
-    ch = stream.next();
+    }
 
+    stream.next();
     if (sol && /[\/\*!#;:>|]/.test(ch)) {
       if (ch == "!") { // tw header
         stream.skipToEnd();
@@ -33753,95 +33831,77 @@ CodeMirror.defineMode("tiddlywiki", function () {
         stream.eatWhile(">");
         return "quote";
       }
-      if (ch == '|') {
+      if (ch == '|')
         return 'header';
-      }
     }
 
-    if (ch == '{' && stream.match(/\{\{/)) {
+    if (ch == '{' && stream.match(/\{\{/))
       return chain(stream, state, twTokenCode);
-    }
 
     // rudimentary html:// file:// link matching. TW knows much more ...
-    if (/[hf]/i.test(ch)) {
-      if (/[ti]/i.test(stream.peek()) && stream.match(/\b(ttps?|tp|ile):\/\/[\-A-Z0-9+&@#\/%?=~_|$!:,.;]*[A-Z0-9+&@#\/%=~_|$]/i)) {
-        return "link";
-      }
-    }
+    if (/[hf]/i.test(ch) &&
+        /[ti]/i.test(stream.peek()) &&
+        stream.match(/\b(ttps?|tp|ile):\/\/[\-A-Z0-9+&@#\/%?=~_|$!:,.;]*[A-Z0-9+&@#\/%=~_|$]/i))
+      return "link";
+
     // just a little string indicator, don't want to have the whole string covered
-    if (ch == '"') {
+    if (ch == '"')
       return 'string';
-    }
-    if (ch == '~') {    // _no_ CamelCase indicator should be bold
+
+    if (ch == '~')    // _no_ CamelCase indicator should be bold
       return 'brace';
-    }
-    if (/[\[\]]/.test(ch)) { // check for [[..]]
-      if (stream.peek() == ch) {
-        stream.next();
-        return 'brace';
-      }
-    }
+
+    if (/[\[\]]/.test(ch) && stream.match(ch)) // check for [[..]]
+      return 'brace';
+
     if (ch == "@") {    // check for space link. TODO fix @@...@@ highlighting
       stream.eatWhile(isSpaceName);
       return "link";
     }
+
     if (/\d/.test(ch)) {        // numbers
       stream.eatWhile(/\d/);
       return "number";
     }
+
     if (ch == "/") { // tw invisible comment
       if (stream.eat("%")) {
         return chain(stream, state, twTokenComment);
-      }
-      else if (stream.eat("/")) { //
+      } else if (stream.eat("/")) { //
         return chain(stream, state, twTokenEm);
       }
     }
-    if (ch == "_") { // tw underline
-      if (stream.eat("_")) {
+
+    if (ch == "_" && stream.eat("_")) // tw underline
         return chain(stream, state, twTokenUnderline);
-      }
-    }
+
     // strikethrough and mdash handling
-    if (ch == "-") {
-      if (stream.eat("-")) {
-        // if strikethrough looks ugly, change CSS.
-        if (stream.peek() != ' ')
-          return chain(stream, state, twTokenStrike);
-        // mdash
-        if (stream.peek() == ' ')
-          return 'brace';
-      }
+    if (ch == "-" && stream.eat("-")) {
+      // if strikethrough looks ugly, change CSS.
+      if (stream.peek() != ' ')
+        return chain(stream, state, twTokenStrike);
+      // mdash
+      if (stream.peek() == ' ')
+        return 'brace';
     }
-    if (ch == "'") { // tw bold
-      if (stream.eat("'")) {
-        return chain(stream, state, twTokenStrong);
-      }
-    }
-    if (ch == "<") { // tw macro
-      if (stream.eat("<")) {
-        return chain(stream, state, twTokenMacro);
-      }
-    }
-    else {
-      return null;
-    }
+
+    if (ch == "'" && stream.eat("'")) // tw bold
+      return chain(stream, state, twTokenStrong);
+
+    if (ch == "<" && stream.eat("<")) // tw macro
+      return chain(stream, state, twTokenMacro);
 
     // core macro handling
     stream.eatWhile(/[\w\$_]/);
-    var word = stream.current(),
-    known = textwords.propertyIsEnumerable(word) && textwords[word];
-
-    return known ? known.style : null;
-  } // jsTokenBase()
+    return textwords.propertyIsEnumerable(stream.current()) ? "keyword" : null
+  }
 
   // tw invisible comment
   function twTokenComment(stream, state) {
-    var maybeEnd = false,
-    ch;
+    var maybeEnd = false, ch;
     while (ch = stream.next()) {
       if (ch == "/" && maybeEnd) {
-        state.tokenize = jsTokenBase;
+        state.tokenize = tokenBase;
         break;
       }
       maybeEnd = (ch == "%");
@@ -33855,7 +33915,7 @@ CodeMirror.defineMode("tiddlywiki", function () {
     ch;
     while (ch = stream.next()) {
       if (ch == "'" && maybeEnd) {
-        state.tokenize = jsTokenBase;
+        state.tokenize = tokenBase;
         break;
       }
       maybeEnd = (ch == "'");
@@ -33872,12 +33932,12 @@ CodeMirror.defineMode("tiddlywiki", function () {
     }
 
     if (!sb && stream.match(reUntilCodeStop)) {
-      state.tokenize = jsTokenBase;
+      state.tokenize = tokenBase;
       return "comment";
     }
 
     if (sb && stream.sol() && stream.match(reCodeBlockStop)) {
-      state.tokenize = jsTokenBase;
+      state.tokenize = tokenBase;
       return "comment";
     }
 
@@ -33891,7 +33951,7 @@ CodeMirror.defineMode("tiddlywiki", function () {
     ch;
     while (ch = stream.next()) {
       if (ch == "/" && maybeEnd) {
-        state.tokenize = jsTokenBase;
+        state.tokenize = tokenBase;
         break;
       }
       maybeEnd = (ch == "/");
@@ -33905,7 +33965,7 @@ CodeMirror.defineMode("tiddlywiki", function () {
     ch;
     while (ch = stream.next()) {
       if (ch == "_" && maybeEnd) {
-        state.tokenize = jsTokenBase;
+        state.tokenize = tokenBase;
         break;
       }
       maybeEnd = (ch == "_");
@@ -33920,7 +33980,7 @@ CodeMirror.defineMode("tiddlywiki", function () {
 
     while (ch = stream.next()) {
       if (ch == "-" && maybeEnd) {
-        state.tokenize = jsTokenBase;
+        state.tokenize = tokenBase;
         break;
       }
       maybeEnd = (ch == "-");
@@ -33930,61 +33990,43 @@ CodeMirror.defineMode("tiddlywiki", function () {
 
   // macro
   function twTokenMacro(stream, state) {
-    var ch, word, known;
-
     if (stream.current() == '<<') {
       return 'macro';
     }
 
-    ch = stream.next();
+    var ch = stream.next();
     if (!ch) {
-      state.tokenize = jsTokenBase;
+      state.tokenize = tokenBase;
       return null;
     }
     if (ch == ">") {
       if (stream.peek() == '>') {
         stream.next();
-        state.tokenize = jsTokenBase;
+        state.tokenize = tokenBase;
         return "macro";
       }
     }
 
     stream.eatWhile(/[\w\$_]/);
-    word = stream.current();
-    known = keywords.propertyIsEnumerable(word) && keywords[word];
-
-    if (known) {
-      return known.style, word;
-    }
-    else {
-      return null, word;
-    }
+    return keywords.propertyIsEnumerable(stream.current()) ? "keyword" : null
   }
 
   // Interface
   return {
     startState: function () {
-      return {
-        tokenize: jsTokenBase,
-        indented: 0,
-        level: 0
-      };
+      return {tokenize: tokenBase};
     },
 
     token: function (stream, state) {
       if (stream.eatSpace()) return null;
       var style = state.tokenize(stream, state);
       return style;
-    },
-
-    electricChars: ""
+    }
   };
 });
 
 CodeMirror.defineMIME("text/x-tiddlywiki", "tiddlywiki");
 });
-
-//}}}
 
 },{"../../lib/codemirror":11}],104:[function(require,module,exports){
 // CodeMirror, copyright (c) by Marijn Haverbeke and others
@@ -34540,7 +34582,9 @@ CodeMirror.defineMode('troff', function() {
   };
 });
 
-CodeMirror.defineMIME('troff', 'troff');
+CodeMirror.defineMIME('text/troff', 'troff');
+CodeMirror.defineMIME('text/x-troff', 'troff');
+CodeMirror.defineMIME('application/x-troff', 'troff');
 
 });
 
@@ -35214,15 +35258,15 @@ CodeMirror.defineMIME("text/turtle", "turtle");
 
 (function(mod) {
   if (typeof exports == "object" && typeof module == "object") // CommonJS
-    mod(require("../../lib/codemirror"));
+    mod(require("../../lib/codemirror"),  require("../../addon/mode/multiplex"));
   else if (typeof define == "function" && define.amd) // AMD
-    define(["../../lib/codemirror"], mod);
+    define(["../../lib/codemirror", "../../addon/mode/multiplex"], mod);
   else // Plain browser env
     mod(CodeMirror);
 })(function(CodeMirror) {
   "use strict";
 
-  CodeMirror.defineMode("twig", function() {
+  CodeMirror.defineMode("twig:inner", function() {
     var keywords = ["and", "as", "autoescape", "endautoescape", "block", "do", "endblock", "else", "elseif", "extends", "for", "endfor", "embed", "endembed", "filter", "endfilter", "flush", "from", "if", "endif", "in", "is", "include", "import", "not", "or", "set", "spaceless", "endspaceless", "with", "endwith", "trans", "endtrans", "blocktrans", "endblocktrans", "macro", "endmacro", "use", "verbatim", "endverbatim"],
         operator = /^[+\-*&%=<>!?|~^]/,
         sign = /^[:\[\(\{]/,
@@ -35339,10 +35383,19 @@ CodeMirror.defineMIME("text/turtle", "turtle");
     };
   });
 
+  CodeMirror.defineMode("twig", function(config, parserConfig) {
+    var twigInner = CodeMirror.getMode(config, "twig:inner");
+    if (!parserConfig || !parserConfig.base) return twigInner;
+    return CodeMirror.multiplexingMode(
+      CodeMirror.getMode(config, parserConfig.base), {
+        open: /\{[{#%]/, close: /[}#%]\}/, mode: twigInner, parseDelimiters: true
+      }
+    );
+  });
   CodeMirror.defineMIME("text/x-twig", "twig");
 });
 
-},{"../../lib/codemirror":11}],112:[function(require,module,exports){
+},{"../../addon/mode/multiplex":6,"../../lib/codemirror":11}],112:[function(require,module,exports){
 // CodeMirror, copyright (c) by Marijn Haverbeke and others
 // Distributed under an MIT license: http://codemirror.net/LICENSE
 
@@ -36009,7 +36062,7 @@ CodeMirror.defineMode("velocity", function() {
         state.beforeParams = false;
         var ch = stream.next();
         // start of unparsed string?
-        if ((ch == "'") && state.inParams) {
+        if ((ch == "'") && !state.inString && state.inParams) {
             state.lastTokenWasBuiltin = false;
             return chain(stream, state, tokenString(ch));
         }
@@ -36428,7 +36481,7 @@ CodeMirror.defineMode("verilog", function(config, parserConfig) {
     if (text == contextClosing) {
       return true;
     } else {
-      // contextClosing may be mulitple keywords separated by ;
+      // contextClosing may be multiple keywords separated by ;
       var closingKeywords = contextClosing.split(";");
       for (var i in closingKeywords) {
         if (text == closingKeywords[i]) {
@@ -36753,7 +36806,7 @@ CodeMirror.defineMode("vhdl", function(config, parserConfig) {
       multiLineStrings = parserConfig.multiLineStrings;
 
   var keywords = words("abs,access,after,alias,all,and,architecture,array,assert,attribute,begin,block," +
-      "body,buffer,bus,case,component,configuration,constant,disconnent,downto,else,elsif,end,end block,end case," +
+      "body,buffer,bus,case,component,configuration,constant,disconnect,downto,else,elsif,end,end block,end case," +
       "end component,end for,end generate,end if,end loop,end process,end record,end units,entity,exit,file,for," +
       "function,generate,generic,generic map,group,guarded,if,impure,in,inertial,inout,is,label,library,linkage," +
       "literal,loop,map,mod,nand,new,next,nor,null,of,on,open,or,others,out,package,package body,port,port map," +
@@ -37392,7 +37445,7 @@ CodeMirror.defineMode("xquery", function() {
   // function. Each keyword is a property of the keywords object whose
   // value is {type: atype, style: astyle}
   var keywords = function(){
-    // conveinence functions used to build keywords object
+    // convenience functions used to build keywords object
     function kw(type) {return {type: type, style: "keyword"};}
     var A = kw("keyword a")
       , B = kw("keyword b")
@@ -60886,14 +60939,17 @@ var shortcuts = {
 	"Cmd-B": toggleBold,
 	"Cmd-I": toggleItalic,
 	"Cmd-K": drawLink,
-	//"Cmd-H": toggleHeadingSmaller,
-	"Shift-Cmd-H": toggleHeadingBigger,
+	// "Cmd-H": toggleHeadingSmaller,
+	// "Shift-Cmd-H": toggleHeadingBigger,
 	"Cmd-Alt-I": drawImage,
 	"Cmd-'": toggleBlockquote,
-	"Cmd-Alt-L": toggleOrderedList,
-	"Cmd-L": toggleUnorderedList,
+	"Shift-Cmd-O": toggleOrderedList,
+	"Shift-Cmd-L": toggleUnorderedList,
 	"Cmd-Alt-C": toggleCodeBlock,
-	"Cmd-P": togglePreview
+	"Cmd-P": togglePreview,
+	"Shift-Cmd-P": toggleSideBySide,
+	"Shift-Cmd-H": drawHorizontalRule,
+	"Cmd-U": toggleStrikethrough
 };
 
 var isMobile = function() {
@@ -60932,6 +60988,7 @@ function createIcon(options, enableTooltips) {
 		if(isMac) {
 			el.title = el.title.replace("Ctrl", "⌘");
 			el.title = el.title.replace("Alt", "⌥");
+			el.title = el.title.replace("Shift", "⇧");
 		}
 	}
 
@@ -61110,6 +61167,14 @@ function toggleHeading2(editor) {
 function toggleHeading3(editor) {
 	var cm = editor.codemirror;
 	_toggleHeading(cm, undefined, 3);
+}
+
+/**
+ * Action for toggling heading size 4
+ */
+function toggleHeading4(editor) {
+	var cm = editor.codemirror;
+	_toggleHeading(cm, undefined, 4);
 }
 
 
@@ -61404,13 +61469,21 @@ function _toggleHeading(cm, direction, size) {
 					} else {
 						text = "## " + text.substr(currHeadingLevel + 1);
 					}
-				} else {
+				} else if(size == 3) {
 					if(currHeadingLevel <= 0) {
 						text = "### " + text;
 					} else if(currHeadingLevel == size) {
 						text = text.substr(currHeadingLevel + 1);
 					} else {
 						text = "### " + text.substr(currHeadingLevel + 1);
+					}
+				} else {
+					if(currHeadingLevel <= 0) {
+						text = "#### " + text;
+					} else if(currHeadingLevel == size) {
+						text = text.substr(currHeadingLevel + 1);
+					} else {
+						text = "#### " + text.substr(currHeadingLevel + 1);
 					}
 				}
 			}
@@ -61604,19 +61677,19 @@ var toolbarBuiltInButtons = {
 		name: "heading",
 		action: toggleHeadingSmaller,
 		className: "fa fa-header",
-		title: "Heading (Ctrl+H)"
+		title: "Heading"
 	},
 	"heading-smaller": {
 		name: "heading-smaller",
 		action: toggleHeadingSmaller,
 		className: "fa fa-header fa-header-x fa-header-smaller",
-		title: "Smaller Heading (Ctrl+H)"
+		title: "Smaller Heading"
 	},
 	"heading-bigger": {
 		name: "heading-bigger",
 		action: toggleHeadingBigger,
 		className: "fa fa-header fa-header-x fa-header-bigger",
-		title: "Bigger Heading (Shift+Ctrl+H)"
+		title: "Bigger Heading"
 	},
 	"heading-1": {
 		name: "heading-1",
@@ -61636,6 +61709,12 @@ var toolbarBuiltInButtons = {
 		className: "fa fa-header fa-header-x fa-header-3",
 		title: "Small Heading"
 	},
+	"heading-4": {
+		name: "heading-4",
+		action: toggleHeading4,
+		className: "fa fa-header fa-header-x fa-header-4",
+		title: "Small Heading"
+	},
 	"code": {
 		name: "code",
 		action: toggleCodeBlock,
@@ -61652,13 +61731,13 @@ var toolbarBuiltInButtons = {
 		name: "unordered-list",
 		action: toggleUnorderedList,
 		className: "fa fa-list-ul",
-		title: "Generic List (Ctrl+L)"
+		title: "Generic List (Shift+Ctrl+U)"
 	},
 	"ordered-list": {
 		name: "ordered-list",
 		action: toggleOrderedList,
 		className: "fa fa-list-ol",
-		title: "Numbered List (Ctrl+Alt+L)"
+		title: "Numbered List (Shift+Ctrl+O)"
 	},
 	"link": {
 		name: "link",
@@ -61676,7 +61755,7 @@ var toolbarBuiltInButtons = {
 		name: "horizontal-rule",
 		action: drawHorizontalRule,
 		className: "fa fa-minus",
-		title: "Insert Horizontal Line"
+		title: "Insert Horizontal Line (Shift+Ctrl+H)"
 	},
 	"preview": {
 		name: "preview",
@@ -61688,7 +61767,7 @@ var toolbarBuiltInButtons = {
 		name: "side-by-side",
 		action: toggleSideBySide,
 		className: "fa fa-columns no-disable no-mobile",
-		title: "Toggle Side by Side (F9)"
+		title: "Toggle Side by Side (Ctrl+Shift+P)"
 	},
 	"fullscreen": {
 		name: "fullscreen",
@@ -62175,6 +62254,7 @@ SimpleMDE.toggleHeadingBigger = toggleHeadingBigger;
 SimpleMDE.toggleHeading1 = toggleHeading1;
 SimpleMDE.toggleHeading2 = toggleHeading2;
 SimpleMDE.toggleHeading3 = toggleHeading3;
+SimpleMDE.toggleHeading4 = toggleHeading4;
 SimpleMDE.toggleCodeBlock = toggleCodeBlock;
 SimpleMDE.toggleUnorderedList = toggleUnorderedList;
 SimpleMDE.toggleOrderedList = toggleOrderedList;
@@ -62216,6 +62296,9 @@ SimpleMDE.prototype.toggleHeading2 = function() {
 };
 SimpleMDE.prototype.toggleHeading3 = function() {
 	toggleHeading3(this);
+};
+SimpleMDE.prototype.toggleHeading4 = function() {
+	toggleHeading4(this);
 };
 SimpleMDE.prototype.toggleCodeBlock = function() {
 	toggleCodeBlock(this);
