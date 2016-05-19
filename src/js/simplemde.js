@@ -12,14 +12,14 @@ require("codemirror/mode/markdown/markdown.js");
 require("codemirror/addon/mode/overlay.js");
 require("./codemirror/modes.js");
 /*
-require("codemirror/mode/gfm/gfm.js");
-require("codemirror/mode/javascript/javascript.js");
-require("codemirror/mode/css/css.js");
-require("codemirror/mode/htmlmixed/htmlmixed.js");
-require("codemirror/mode/xml/xml.js");
-require("codemirror/mode/clike/clike.js");
-require("codemirror/mode/swift/swift.js");
-require("codemirror/mode/sql/sql.js");
+   require("codemirror/mode/gfm/gfm.js");
+   require("codemirror/mode/javascript/javascript.js");
+   require("codemirror/mode/css/css.js");
+   require("codemirror/mode/htmlmixed/htmlmixed.js");
+   require("codemirror/mode/xml/xml.js");
+   require("codemirror/mode/clike/clike.js");
+   require("codemirror/mode/swift/swift.js");
+   require("codemirror/mode/sql/sql.js");
 //require("codemirror/mode/meta.js");
 */
 //require("spell-checker");
@@ -32,28 +32,28 @@ var Emitter = require("event-kit").Emitter;
 var isMac = /Mac/.test(navigator.platform);
 
 var shortcuts = {
-	"Cmd-B": toggleBold,
-	"Cmd-I": toggleItalic,
-	"Cmd-K": drawLink,
-	// "Cmd-H": toggleHeadingSmaller,
-	// "Shift-Cmd-H": toggleHeadingBigger,
-	"Cmd-Alt-I": drawImage,
-	"Cmd-'": toggleBlockquote,
-	"Shift-Cmd-O": toggleOrderedList,
-	"Shift-Cmd-L": toggleUnorderedList,
-	"Cmd-Alt-C": toggleCodeBlock,
-	"Cmd-P": togglePreview,
-	"Shift-Cmd-P": toggleSideBySide,
-	"Shift-Cmd-H": drawHorizontalRule,
-	"Cmd-U": toggleStrikethrough
+  "Cmd-B": toggleBold,
+  "Cmd-I": toggleItalic,
+  "Cmd-K": drawLink,
+  // "Cmd-H": toggleHeadingSmaller,
+  // "Shift-Cmd-H": toggleHeadingBigger,
+  "Cmd-Alt-I": drawImage,
+  "Cmd-'": toggleBlockquote,
+  "Shift-Cmd-O": toggleOrderedList,
+  "Shift-Cmd-L": toggleUnorderedList,
+  "Cmd-Alt-C": toggleCodeBlock,
+  "Cmd-E": togglePreview,
+  "Cmd-P": toggleSideBySide,
+  "Shift-Cmd-H": drawHorizontalRule,
+  "Cmd-U": toggleStrikethrough
 };
 
 var isMobile = function() {
-	var check = false;
-	(function(a) {
-		if(/(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino|android|ipad|playbook|silk/i.test(a) || /1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(a.substr(0, 4))) check = true;
-	})(navigator.userAgent || navigator.vendor || window.opera);
-	return check;
+  var check = false;
+  (function(a) {
+    if (/(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino|android|ipad|playbook|silk/i.test(a) || /1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(a.substr(0, 4))) check = true;
+  })(navigator.userAgent || navigator.vendor || window.opera);
+  return check;
 };
 
 
@@ -61,12 +61,12 @@ var isMobile = function() {
  * Fix shortcut. Mac use Command, others use Ctrl.
  */
 function fixShortcut(name) {
-	if(isMac) {
-		name = name.replace("Ctrl", "Cmd");
-	} else {
-		name = name.replace("Cmd", "Ctrl");
-	}
-	return name;
+  if (isMac) {
+    name = name.replace("Ctrl", "Cmd");
+  } else {
+    name = name.replace("Cmd", "Ctrl");
+  }
+  return name;
 }
 
 
@@ -74,29 +74,29 @@ function fixShortcut(name) {
  * Create icon element for toolbar.
  */
 function createIcon(options, enableTooltips) {
-	options = options || {};
-	var el = document.createElement("a");
-	enableTooltips = (enableTooltips == undefined) ? true : enableTooltips;
+  options = options || {};
+  var el = document.createElement("a");
+  enableTooltips = (enableTooltips == undefined) ? true : enableTooltips;
 
-	if(options.title && enableTooltips) {
-		el.title = options.title;
+  if (options.title && enableTooltips) {
+    el.title = options.title;
 
-		if(isMac) {
-			el.title = el.title.replace("Ctrl", "⌘");
-			el.title = el.title.replace("Alt", "⌥");
-			el.title = el.title.replace("Shift", "⇧");
-		}
-	}
+    if (isMac) {
+      el.title = el.title.replace("Ctrl", "⌘");
+      el.title = el.title.replace("Alt", "⌥");
+      el.title = el.title.replace("Shift", "⇧");
+    }
+  }
 
-	el.className = options.className;
-	return el;
+  el.className = options.className;
+  return el;
 }
 
 function createSep() {
-	var el = document.createElement("i");
-	el.className = "separator";
-	el.innerHTML = "|";
-	return el;
+  var el = document.createElement("i");
+  el.className = "separator";
+  el.innerHTML = "|";
+  return el;
 }
 
 
@@ -104,38 +104,37 @@ function createSep() {
  * The state of CodeMirror at the given position.
  */
 function getState(cm, pos) {
-	pos = pos || cm.getCursor("start");
-	var stat = cm.getTokenAt(pos);
-	if(!stat.type) return {};
+  pos = pos || cm.getCursor("start");
+  var stat = cm.getTokenAt(pos);
+  if (!stat.type) return {};
 
-	var types = stat.type.split(" ");
+  var types = stat.type.split(" ");
 
-	var ret = {},
-		data, text;
-	for(var i = 0; i < types.length; i++) {
-		data = types[i];
-		if(data === "strong") {
-			ret.bold = true;
-		} else if(data === "variable-2") {
-			text = cm.getLine(pos.line);
-			if(/^\s*\d+\.\s/.test(text)) {
-				ret["ordered-list"] = true;
-			} else {
-				ret["unordered-list"] = true;
-			}
-		} else if(data === "atom") {
-			ret.quote = true;
-		} else if(data === "em") {
-			ret.italic = true;
-		} else if(data === "quote") {
-			ret.quote = true;
-		} else if(data === "strikethrough") {
-			ret.strikethrough = true;
-		} else if(data === "comment") {
-			ret.code = true;
-		}
-	}
-	return ret;
+  var ret = {}, data, text;
+  for (var i = 0; i < types.length; i++) {
+    data = types[i];
+    if (data === "strong") {
+      ret.bold = true;
+    } else if (data === "variable-2") {
+      text = cm.getLine(pos.line);
+      if (/^\s*\d+\.\s/.test(text)) {
+        ret["ordered-list"] = true;
+      } else {
+        ret["unordered-list"] = true;
+      }
+    } else if (data === "atom") {
+      ret.quote = true;
+    } else if (data === "em") {
+      ret.italic = true;
+    } else if (data === "quote") {
+      ret.quote = true;
+    } else if (data === "strikethrough") {
+      ret.strikethrough = true;
+    } else if (data === "comment") {
+      ret.code = true;
+    }
+  }
+  return ret;
 }
 
 
@@ -146,44 +145,44 @@ var saved_overflow = "";
  * Toggle full screen of the editor.
  */
 function toggleFullScreen(editor) {
-	// Set fullscreen
-	var cm = editor.codemirror;
-	cm.setOption("fullScreen", !cm.getOption("fullScreen"));
+  // Set fullscreen
+  var cm = editor.codemirror;
+  cm.setOption("fullScreen", !cm.getOption("fullScreen"));
 
 
-	// Prevent scrolling on body during fullscreen active
-	if(cm.getOption("fullScreen")) {
-		saved_overflow = document.body.style.overflow;
-		document.body.style.overflow = "hidden";
-	} else {
-		document.body.style.overflow = saved_overflow;
-	}
+  // Prevent scrolling on body during fullscreen active
+  if (cm.getOption("fullScreen")) {
+    saved_overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = saved_overflow;
+  }
 
 
-	// Update toolbar class
-	var wrap = cm.getWrapperElement();
+  // Update toolbar class
+  var wrap = cm.getWrapperElement();
 
-	if(!/fullscreen/.test(wrap.previousSibling.className)) {
-		wrap.previousSibling.className += " fullscreen";
-	} else {
-		wrap.previousSibling.className = wrap.previousSibling.className.replace(/\s*fullscreen\b/, "");
-	}
-
-
-	// Update toolbar button
-	var toolbarButton = editor.toolbarElements.fullscreen;
-
-	if(!/active/.test(toolbarButton.className)) {
-		toolbarButton.className += " active";
-	} else {
-		toolbarButton.className = toolbarButton.className.replace(/\s*active\s*/g, "");
-	}
+  if (!/fullscreen/.test(wrap.previousSibling.className)) {
+    wrap.previousSibling.className += " fullscreen";
+  } else {
+    wrap.previousSibling.className = wrap.previousSibling.className.replace(/\s*fullscreen\b/, "");
+  }
 
 
-	// Hide side by side if needed
-	var sidebyside = cm.getWrapperElement().nextSibling;
-	if(/editor-preview-active-side/.test(sidebyside.className))
-		toggleSideBySide(editor);
+  // Update toolbar button
+  var toolbarButton = editor.toolbarElements.fullscreen;
+
+  if (!/active/.test(toolbarButton.className)) {
+    toolbarButton.className += " active";
+  } else {
+    toolbarButton.className = toolbarButton.className.replace(/\s*active\s*/g, "");
+  }
+
+
+  // Hide side by side if needed
+  var sidebyside = cm.getWrapperElement().nextSibling;
+  if (/editor-preview-active-side/.test(sidebyside.className))
+    toggleSideBySide(editor);
 }
 
 
@@ -191,7 +190,7 @@ function toggleFullScreen(editor) {
  * Action for toggling bold.
  */
 function toggleBold(editor) {
-	_toggleBlock(editor, "bold", "**");
+  _toggleBlock(editor, "bold", "**");
 }
 
 
@@ -199,7 +198,7 @@ function toggleBold(editor) {
  * Action for toggling italic.
  */
 function toggleItalic(editor) {
-	_toggleBlock(editor, "italic", "*");
+  _toggleBlock(editor, "italic", "*");
 }
 
 
@@ -207,70 +206,70 @@ function toggleItalic(editor) {
  * Action for toggling strikethrough.
  */
 function toggleStrikethrough(editor) {
-	_toggleBlock(editor, "strikethrough", "~~");
+  _toggleBlock(editor, "strikethrough", "~~");
 }
 
 /**
  * Action for toggling code block.
  */
 function toggleCodeBlock(editor) {
-	_toggleBlock(editor, "code", "```\r\n", "\r\n```");
+  _toggleBlock(editor, "code", "```\r\n", "\r\n```");
 }
 
 /**
  * Action for toggling blockquote.
  */
 function toggleBlockquote(editor) {
-	var cm = editor.codemirror;
-	_toggleLine(cm, "quote");
+  var cm = editor.codemirror;
+  _toggleLine(cm, "quote");
 }
 
 /**
  * Action for toggling heading size: normal -> h1 -> h2 -> h3 -> h4 -> h5 -> h6 -> normal
  */
 function toggleHeadingSmaller(editor) {
-	var cm = editor.codemirror;
-	_toggleHeading(cm, "smaller");
+  var cm = editor.codemirror;
+  _toggleHeading(cm, "smaller");
 }
 
 /**
  * Action for toggling heading size: normal -> h6 -> h5 -> h4 -> h3 -> h2 -> h1 -> normal
  */
 function toggleHeadingBigger(editor) {
-	var cm = editor.codemirror;
-	_toggleHeading(cm, "bigger");
+  var cm = editor.codemirror;
+  _toggleHeading(cm, "bigger");
 }
 
 /**
  * Action for toggling heading size 1
  */
 function toggleHeading1(editor) {
-	var cm = editor.codemirror;
-	_toggleHeading(cm, undefined, 1);
+  var cm = editor.codemirror;
+  _toggleHeading(cm, undefined, 1);
 }
 
 /**
  * Action for toggling heading size 2
  */
 function toggleHeading2(editor) {
-	var cm = editor.codemirror;
-	_toggleHeading(cm, undefined, 2);
+  var cm = editor.codemirror;
+  _toggleHeading(cm, undefined, 2);
 }
 
 /**
  * Action for toggling heading size 3
  */
 function toggleHeading3(editor) {
-	var cm = editor.codemirror;
-	_toggleHeading(cm, undefined, 3);
+  var cm = editor.codemirror;
+  _toggleHeading(cm, undefined, 3);
 }
 
 /**
  * Action for toggling heading size 4
  */
 function toggleHeading4(editor) {
-	var cm = editor.codemirror;
-	_toggleHeading(cm, undefined, 4);
+  var cm = editor.codemirror;
+  _toggleHeading(cm, undefined, 4);
 }
 
 
@@ -278,8 +277,8 @@ function toggleHeading4(editor) {
  * Action for toggling ul.
  */
 function toggleUnorderedList(editor) {
-	var cm = editor.codemirror;
-	_toggleLine(cm, "unordered-list");
+  var cm = editor.codemirror;
+  _toggleLine(cm, "unordered-list");
 }
 
 
@@ -287,38 +286,38 @@ function toggleUnorderedList(editor) {
  * Action for toggling ol.
  */
 function toggleOrderedList(editor) {
-	var cm = editor.codemirror;
-	_toggleLine(cm, "ordered-list");
+  var cm = editor.codemirror;
+  _toggleLine(cm, "ordered-list");
 }
 
 /**
  * Action for drawing a link.
  */
 function drawLink(editor) {
-	var cm = editor.codemirror;
-	var stat = getState(cm);
-	var options = editor.options;
-	_replaceSelection(cm, stat.link, options.insertTexts.link);
+  var cm = editor.codemirror;
+  var stat = getState(cm);
+  var options = editor.options;
+  _replaceSelection(cm, stat.link, options.insertTexts.link);
 }
 
 /**
  * Action for drawing an img.
  */
 function drawImage(editor) {
-	var cm = editor.codemirror;
-	var stat = getState(cm);
-	var options = editor.options;
-	_replaceSelection(cm, stat.image, options.insertTexts.image);
+  var cm = editor.codemirror;
+  var stat = getState(cm);
+  var options = editor.options;
+  _replaceSelection(cm, stat.image, options.insertTexts.image);
 }
 
 /**
  * Action for drawing a horizontal rule.
  */
 function drawHorizontalRule(editor) {
-	var cm = editor.codemirror;
-	var stat = getState(cm);
-	var options = editor.options;
-	_replaceSelection(cm, stat.image, options.insertTexts.horizontalRule);
+  var cm = editor.codemirror;
+  var stat = getState(cm);
+  var options = editor.options;
+  _replaceSelection(cm, stat.image, options.insertTexts.horizontalRule);
 }
 
 
@@ -326,9 +325,9 @@ function drawHorizontalRule(editor) {
  * Undo action.
  */
 function undo(editor) {
-	var cm = editor.codemirror;
-	cm.undo();
-	cm.focus();
+  var cm = editor.codemirror;
+  cm.undo();
+  cm.focus();
 }
 
 
@@ -336,9 +335,9 @@ function undo(editor) {
  * Redo action.
  */
 function redo(editor) {
-	var cm = editor.codemirror;
-	cm.redo();
-	cm.focus();
+  var cm = editor.codemirror;
+  cm.redo();
+  cm.focus();
 }
 
 
@@ -346,77 +345,77 @@ function redo(editor) {
  * Toggle side by side preview
  */
 function toggleSideBySide(editor) {
-	if(isSideBySideEnabled(editor)) {
-		disableSideBySide(editor);
-	} else {
-		enableSideBySide(editor);
-	}
+  if (isSideBySideEnabled(editor)) {
+    disableSideBySide(editor);
+  } else {
+    enableSideBySide(editor);
+  }
 }
 
 function isSideBySideEnabled(editor) {
-	var cm = editor.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.nextSibling;
+  var cm = editor.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
 
-	return /editor-preview-active-side/.test(preview.className);
+  return /editor-preview-active-side/.test(preview.className);
 }
 
 function enableSideBySide(editor) {
-	var cm = editor.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.nextSibling;
-	var toolbarButton = editor.toolbarElements["side-by-side"] || {};
+  var cm = editor.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
+  var toolbarButton = editor.toolbarElements["side-by-side"] || {};
 
-	// Hide normal preview if active
-	if(isPreviewShown(editor)) {
-		hidePreview(editor);
-	}
+  // Hide normal preview if active
+  if (isPreviewShown(editor)) {
+    hidePreview(editor);
+  }
 
-	_.defer(function() {
+  _.defer(function() {
 
-		// When the preview button is clicked for the first time,
-		// give some time for the transition from editor.css to fire and the view to slide from right to left,
-		// instead of just appearing.
-		setTimeout(function() {
-			preview.className += " editor-preview-active-side";
-		}, 1);
-		toolbarButton.className += " active";
-		wrapper.className += " CodeMirror-sided";
+    // When the preview button is clicked for the first time,
+    // give some time for the transition from editor.css to fire and the view to slide from right to left,
+    // instead of just appearing.
+    setTimeout(function() {
+      preview.className += " editor-preview-active-side";
+    }, 1);
+    toolbarButton.className += " active";
+    wrapper.className += " CodeMirror-sided";
 
-		// Start preview with the current text
-		//preview.innerHTML = editor.options.previewRender(editor.value(), preview);
-		editor.updatePreview();
+    // Start preview with the current text
+    //preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+    editor.updatePreview();
 
-		// Updates preview
-		editor._updatePreview = _.throttle(function() {
-			//preview.innerHTML = editor.options.previewRender(editor.value(), preview);
-			editor.updatePreview();
-		}, 1000);
-		cm.on("update", editor._updatePreview);
-		_.defer(function() {
-			cm.refresh();
-			cm = null;
-		});
+    // Updates preview
+    editor._updatePreview = _.throttle(function() {
+      //preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+      editor.updatePreview();
+    }, 1000);
+    cm.on("update", editor._updatePreview);
+    _.defer(function() {
+      cm.refresh();
+      cm = null;
+    });
 
-	});
+  });
 }
 
 function disableSideBySide(editor) {
-	var cm = editor.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.nextSibling;
-	var toolbarButton = editor.toolbarElements["side-by-side"] || {};
+  var cm = editor.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
+  var toolbarButton = editor.toolbarElements["side-by-side"] || {};
 
-	preview.className = preview.className.replace(
-		/\s*editor-preview-active-side\s*/g, ""
-	);
-	toolbarButton.className = toolbarButton.className.replace(/\s*active\s*/g, "");
-	wrapper.className = wrapper.className.replace(/\s*CodeMirror-sided\s*/g, " ");
+  preview.className = preview.className.replace(
+    /\s*editor-preview-active-side\s*/g, ""
+  );
+  toolbarButton.className = toolbarButton.className.replace(/\s*active\s*/g, "");
+  wrapper.className = wrapper.className.replace(/\s*CodeMirror-sided\s*/g, " ");
 
-	// Updates preview
-	cm.off("update", editor._updatePreview);
-	cm.refresh();
-	editor._updatePreview = undefined;
+  // Updates preview
+  cm.off("update", editor._updatePreview);
+  cm.refresh();
+  editor._updatePreview = undefined;
 }
 
 
@@ -424,465 +423,480 @@ function disableSideBySide(editor) {
  * Preview action.
  */
 function togglePreview(editor) {
-	if(isPreviewShown(editor)) {
-		hidePreview(editor);
-	} else {
-		showPreview(editor);
-	}
+  if (isPreviewShown(editor)) {
+    hidePreview(editor);
+  } else {
+    showPreview(editor);
+  }
 }
 
 function isPreviewShown(editor) {
-	var cm = editor.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.nextSibling;
+  var cm = editor.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
 
-	return /editor-preview-active([^-]|$)/.test(preview.className);
+  return /editor-preview-active([^-]|$)/.test(preview.className);
 }
 
 function showPreview(editor) {
-	var cm = editor.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var toolbar_div = editor.container.previousSibling;
-	var toolbar = editor.toolbarElements.preview;
-	var preview = wrapper.nextSibling;
+  var cm = editor.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var toolbar_div = editor.container.previousSibling;
+  var toolbar = editor.toolbarElements.preview;
+  var preview = wrapper.nextSibling;
 
-	if(isSideBySideEnabled(editor)) {
-		disableSideBySide(editor);
-	}
+  // calc scroll position of editor
+  var height = cm.getScrollInfo().height - cm.getScrollInfo().clientHeight;
+  var ratio = parseFloat(cm.getScrollInfo().top) / height;
 
-	_.defer(function() {
-		// When the preview button is clicked for the first time,
-		// give some time for the transition from editor.css to fire and the view to slide from right to left,
-		// instead of just appearing.
-		setTimeout(function() {
-			preview.className += " editor-preview-active";
-		}, 1);
-		toolbar.className += " active";
-		toolbar_div.className += " disabled-for-preview";
-		wrapper.className += " hidden-for-preview";
-		// preview.innerHTML = editor.options.previewRender(editor.value(), preview);
-		editor.updatePreview();
+  if (isSideBySideEnabled(editor)) {
+    disableSideBySide(editor);
+  }
 
-		// Turn off side by side if needed
-		if(/editor-preview-active-side/.test(preview.className)) {
-			toggleSideBySide(editor);
-		}
-	});
+  // _.defer(function() {
+  // When the preview button is clicked for the first time,
+  // give some time for the transition from editor.css to fire and the view to slide from right to left,
+  // instead of just appearing.
+  setTimeout(function() {
+    preview.className += " editor-preview-active";
+    var move = (preview.scrollHeight - preview.clientHeight) * ratio;
+    preview.scrollTop = Math.max(0, move);
+  }, 1);
+  toolbar.className += " active";
+  toolbar_div.className += " disabled-for-preview";
+  wrapper.className += " hidden-for-preview";
+  // preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+  editor.updatePreview();
+
+  // Turn off side by side if needed
+  if (/editor-preview-active-side/.test(preview.className)) {
+    toggleSideBySide(editor);
+  }
+  //});
 }
 
 function hidePreview(editor) {
-	var cm = editor.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var toolbar_div = editor.container.previousSibling;
-	var toolbar = editor.toolbarElements.preview;
-	var preview = wrapper.nextSibling;
+  var cm = editor.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var toolbar_div = editor.container.previousSibling;
+  var toolbar = editor.toolbarElements.preview;
+  var preview = wrapper.nextSibling;
 
-	preview.className = preview.className.replace(
-		/\s*editor-preview-active\s*/g, ""
-	);
-	wrapper.className = wrapper.className.replace(
-		/\s*hidden-for-preview\s*/g, ""
-	);
-	toolbar.className = toolbar.className.replace(/\s*active\s*/g, "");
-	toolbar_div.className = toolbar_div.className.replace(/\s*disabled-for-preview*/g, "");
+  // calc scroll position of preview
+  var height = preview.scrollHeight - preview.clientHeight;
+  var ratio = parseFloat(preview.scrollTop) / height;
+
+  preview.className = preview.className.replace(
+    /\s*editor-preview-active\s*/g, ""
+  );
+  wrapper.className = wrapper.className.replace(
+    /\s*hidden-for-preview\s*/g, ""
+  );
+  toolbar.className = toolbar.className.replace(/\s*active\s*/g, "");
+  toolbar_div.className = toolbar_div.className.replace(/\s*disabled-for-preview*/g, "");
+
+  cm.refresh();
+
+  var move = (cm.getScrollInfo().height - cm.getScrollInfo().clientHeight) * ratio;
+  cm.scrollTo(0, Math.max(0, move));
 }
 
 
 function _replaceSelection(cm, active, startEnd) {
-	if(/editor-preview-active/.test(cm.getWrapperElement().lastChild.className))
-		return;
+  if (/editor-preview-active/.test(cm.getWrapperElement().lastChild.className))
+    return;
 
-	var text;
-	var start = startEnd[0];
-	var end = startEnd[1];
-	var startPoint = cm.getCursor("start");
-	var endPoint = cm.getCursor("end");
-	if(active) {
-		text = cm.getLine(startPoint.line);
-		start = text.slice(0, startPoint.ch);
-		end = text.slice(startPoint.ch);
-		cm.replaceRange(start + end, {
-			line: startPoint.line,
-			ch: 0
-		});
-	} else {
-		text = cm.getSelection();
-		cm.replaceSelection(start + text + end);
+  var text;
+  var start = startEnd[0];
+  var end = startEnd[1];
+  var startPoint = cm.getCursor("start");
+  var endPoint = cm.getCursor("end");
+  if (active) {
+    text = cm.getLine(startPoint.line);
+    start = text.slice(0, startPoint.ch);
+    end = text.slice(startPoint.ch);
+    cm.replaceRange(start + end, {
+      line: startPoint.line,
+      ch: 0
+    });
+  } else {
+    text = cm.getSelection();
+    cm.replaceSelection(start + text + end);
 
-		startPoint.ch += start.length;
-		if(startPoint !== endPoint) {
-			endPoint.ch += start.length;
-		}
-	}
-	cm.setSelection(startPoint, endPoint);
-	cm.focus();
+    startPoint.ch += start.length;
+    if (startPoint !== endPoint) {
+      endPoint.ch += start.length;
+    }
+  }
+  cm.setSelection(startPoint, endPoint);
+  cm.focus();
 }
 
 
 function _toggleHeading(cm, direction, size) {
-	if(/editor-preview-active/.test(cm.getWrapperElement().lastChild.className))
-		return;
+  if (/editor-preview-active/.test(cm.getWrapperElement().lastChild.className))
+    return;
 
-	var startPoint = cm.getCursor("start");
-	var endPoint = cm.getCursor("end");
-	for(var i = startPoint.line; i <= endPoint.line; i++) {
-		(function(i) {
-			var text = cm.getLine(i);
-			var currHeadingLevel = text.search(/[^#]/);
+  var startPoint = cm.getCursor("start");
+  var endPoint = cm.getCursor("end");
+  for (var i = startPoint.line; i <= endPoint.line; i++) {
+    (function(i) {
+      var text = cm.getLine(i);
+      var currHeadingLevel = text.search(/[^#]/);
 
-			if(direction !== undefined) {
-				if(currHeadingLevel <= 0) {
-					if(direction == "bigger") {
-						text = "###### " + text;
-					} else {
-						text = "# " + text;
-					}
-				} else if(currHeadingLevel == 6 && direction == "smaller") {
-					text = text.substr(7);
-				} else if(currHeadingLevel == 1 && direction == "bigger") {
-					text = text.substr(2);
-				} else {
-					if(direction == "bigger") {
-						text = text.substr(1);
-					} else {
-						text = "#" + text;
-					}
-				}
-			} else {
-				if(size == 1) {
-					if(currHeadingLevel <= 0) {
-						text = "# " + text;
-					} else if(currHeadingLevel == size) {
-						text = text.substr(currHeadingLevel + 1);
-					} else {
-						text = "# " + text.substr(currHeadingLevel + 1);
-					}
-				} else if(size == 2) {
-					if(currHeadingLevel <= 0) {
-						text = "## " + text;
-					} else if(currHeadingLevel == size) {
-						text = text.substr(currHeadingLevel + 1);
-					} else {
-						text = "## " + text.substr(currHeadingLevel + 1);
-					}
-				} else if(size == 3) {
-					if(currHeadingLevel <= 0) {
-						text = "### " + text;
-					} else if(currHeadingLevel == size) {
-						text = text.substr(currHeadingLevel + 1);
-					} else {
-						text = "### " + text.substr(currHeadingLevel + 1);
-					}
-				} else {
-					if(currHeadingLevel <= 0) {
-						text = "#### " + text;
-					} else if(currHeadingLevel == size) {
-						text = text.substr(currHeadingLevel + 1);
-					} else {
-						text = "#### " + text.substr(currHeadingLevel + 1);
-					}
-				}
-			}
+      if (direction !== undefined) {
+        if (currHeadingLevel <= 0) {
+          if (direction == "bigger") {
+            text = "###### " + text;
+          } else {
+            text = "# " + text;
+          }
+        } else if (currHeadingLevel == 6 && direction == "smaller") {
+          text = text.substr(7);
+        } else if (currHeadingLevel == 1 && direction == "bigger") {
+          text = text.substr(2);
+        } else {
+          if (direction == "bigger") {
+            text = text.substr(1);
+          } else {
+            text = "#" + text;
+          }
+        }
+      } else {
+        if (size == 1) {
+          if (currHeadingLevel <= 0) {
+            text = "# " + text;
+          } else if (currHeadingLevel == size) {
+            text = text.substr(currHeadingLevel + 1);
+          } else {
+            text = "# " + text.substr(currHeadingLevel + 1);
+          }
+        } else if (size == 2) {
+          if (currHeadingLevel <= 0) {
+            text = "## " + text;
+          } else if (currHeadingLevel == size) {
+            text = text.substr(currHeadingLevel + 1);
+          } else {
+            text = "## " + text.substr(currHeadingLevel + 1);
+          }
+        } else if (size == 3) {
+          if (currHeadingLevel <= 0) {
+            text = "### " + text;
+          } else if (currHeadingLevel == size) {
+            text = text.substr(currHeadingLevel + 1);
+          } else {
+            text = "### " + text.substr(currHeadingLevel + 1);
+          }
+        } else {
+          if (currHeadingLevel <= 0) {
+            text = "#### " + text;
+          } else if (currHeadingLevel == size) {
+            text = text.substr(currHeadingLevel + 1);
+          } else {
+            text = "#### " + text.substr(currHeadingLevel + 1);
+          }
+        }
+      }
 
-			cm.replaceRange(text, {
-				line: i,
-				ch: 0
-			}, {
-				line: i,
-				ch: 99999999999999
-			});
-		})(i);
-	}
-	cm.focus();
+      cm.replaceRange(text, {
+        line: i,
+        ch: 0
+      }, {
+        line: i,
+        ch: 99999999999999
+      });
+    })(i);
+  }
+  cm.focus();
 }
 
 
 function _toggleLine(cm, name) {
-	if(/editor-preview-active/.test(cm.getWrapperElement().lastChild.className))
-		return;
+  if (/editor-preview-active/.test(cm.getWrapperElement().lastChild.className))
+    return;
 
-	var stat = getState(cm);
-	var startPoint = cm.getCursor("start");
-	var endPoint = cm.getCursor("end");
-	var repl = {
-		"quote": /^(\s*)\>\s+/,
-		"unordered-list": /^(\s*)(\*|\-|\+)\s+/,
-		"ordered-list": /^(\s*)\d+\.\s+/
-	};
-	var map = {
-		"quote": "> ",
-		"unordered-list": "* ",
-		"ordered-list": "1. "
-	};
-	for(var i = startPoint.line; i <= endPoint.line; i++) {
-		(function(i) {
-			var text = cm.getLine(i);
-			if(stat[name]) {
-				text = text.replace(repl[name], "$1");
-			} else {
-				text = map[name] + text;
-			}
-			cm.replaceRange(text, {
-				line: i,
-				ch: 0
-			}, {
-				line: i,
-				ch: 99999999999999
-			});
-		})(i);
-	}
-	cm.focus();
+  var stat = getState(cm);
+  var startPoint = cm.getCursor("start");
+  var endPoint = cm.getCursor("end");
+  var repl = {
+    "quote": /^(\s*)\>\s+/,
+    "unordered-list": /^(\s*)(\*|\-|\+)\s+/,
+    "ordered-list": /^(\s*)\d+\.\s+/
+  };
+  var map = {
+    "quote": "> ",
+    "unordered-list": "* ",
+    "ordered-list": "1. "
+  };
+  for (var i = startPoint.line; i <= endPoint.line; i++) {
+    (function(i) {
+      var text = cm.getLine(i);
+      if (stat[name]) {
+        text = text.replace(repl[name], "$1");
+      } else {
+        text = map[name] + text;
+      }
+      cm.replaceRange(text, {
+        line: i,
+        ch: 0
+      }, {
+        line: i,
+        ch: 99999999999999
+      });
+    })(i);
+  }
+  cm.focus();
 }
 
 function _toggleBlock(editor, type, start_chars, end_chars) {
-	if(/editor-preview-active/.test(editor.codemirror.getWrapperElement().lastChild.className))
-		return;
+  if (/editor-preview-active/.test(editor.codemirror.getWrapperElement().lastChild.className))
+    return;
 
-	end_chars = (typeof end_chars === "undefined") ? start_chars : end_chars;
-	var cm = editor.codemirror;
-	var stat = getState(cm);
+  end_chars = (typeof end_chars === "undefined") ? start_chars : end_chars;
+  var cm = editor.codemirror;
+  var stat = getState(cm);
 
-	var text;
-	var start = start_chars;
-	var end = end_chars;
+  var text;
+  var start = start_chars;
+  var end = end_chars;
 
-	var startPoint = cm.getCursor("start");
-	var endPoint = cm.getCursor("end");
+  var startPoint = cm.getCursor("start");
+  var endPoint = cm.getCursor("end");
 
-	if(stat[type]) {
-		text = cm.getLine(startPoint.line);
-		start = text.slice(0, startPoint.ch);
-		end = text.slice(startPoint.ch);
-		if(type == "bold") {
-			start = start.replace(/(\*\*|__)(?![\s\S]*(\*\*|__))/, "");
-			end = end.replace(/(\*\*|__)/, "");
-		} else if(type == "italic") {
-			start = start.replace(/(\*|_)(?![\s\S]*(\*|_))/, "");
-			end = end.replace(/(\*|_)/, "");
-		} else if(type == "strikethrough") {
-			start = start.replace(/(\*\*|~~)(?![\s\S]*(\*\*|~~))/, "");
-			end = end.replace(/(\*\*|~~)/, "");
-		}
-		cm.replaceRange(start + end, {
-			line: startPoint.line,
-			ch: 0
-		}, {
-			line: startPoint.line,
-			ch: 99999999999999
-		});
+  if (stat[type]) {
+    text = cm.getLine(startPoint.line);
+    start = text.slice(0, startPoint.ch);
+    end = text.slice(startPoint.ch);
+    if (type == "bold") {
+      start = start.replace(/(\*\*|__)(?![\s\S]*(\*\*|__))/, "");
+      end = end.replace(/(\*\*|__)/, "");
+    } else if (type == "italic") {
+      start = start.replace(/(\*|_)(?![\s\S]*(\*|_))/, "");
+      end = end.replace(/(\*|_)/, "");
+    } else if (type == "strikethrough") {
+      start = start.replace(/(\*\*|~~)(?![\s\S]*(\*\*|~~))/, "");
+      end = end.replace(/(\*\*|~~)/, "");
+    }
+    cm.replaceRange(start + end, {
+      line: startPoint.line,
+      ch: 0
+    }, {
+      line: startPoint.line,
+      ch: 99999999999999
+    });
 
-		if(type == "bold" || type == "strikethrough") {
-			startPoint.ch -= 2;
-			if(startPoint !== endPoint) {
-				endPoint.ch -= 2;
-			}
-		} else if(type == "italic") {
-			startPoint.ch -= 1;
-			if(startPoint !== endPoint) {
-				endPoint.ch -= 1;
-			}
-		}
-	} else {
-		text = cm.getSelection();
-		if(type == "bold") {
-			text = text.split("**").join("");
-			text = text.split("__").join("");
-		} else if(type == "italic") {
-			text = text.split("*").join("");
-			text = text.split("_").join("");
-		} else if(type == "strikethrough") {
-			text = text.split("~~").join("");
-		}
-		cm.replaceSelection(start + text + end);
+    if (type == "bold" || type == "strikethrough") {
+      startPoint.ch -= 2;
+      if (startPoint !== endPoint) {
+        endPoint.ch -= 2;
+      }
+    } else if (type == "italic") {
+      startPoint.ch -= 1;
+      if (startPoint !== endPoint) {
+        endPoint.ch -= 1;
+      }
+    }
+  } else {
+    text = cm.getSelection();
+    if (type == "bold") {
+      text = text.split("**").join("");
+      text = text.split("__").join("");
+    } else if (type == "italic") {
+      text = text.split("*").join("");
+      text = text.split("_").join("");
+    } else if (type == "strikethrough") {
+      text = text.split("~~").join("");
+    }
+    cm.replaceSelection(start + text + end);
 
-		startPoint.ch += start_chars.length;
-		endPoint.ch = startPoint.ch + text.length;
-	}
+    startPoint.ch += start_chars.length;
+    endPoint.ch = startPoint.ch + text.length;
+  }
 
-	cm.setSelection(startPoint, endPoint);
-	cm.focus();
+  cm.setSelection(startPoint, endPoint);
+  cm.focus();
 }
 
 // Merge the properties of one object into another.
 function _mergeProperties(target, source) {
-	for(var property in source) {
-		if(source.hasOwnProperty(property)) {
-			if(source[property] instanceof Array) {
-				target[property] = source[property].concat(target[property] instanceof Array ? target[property] : []);
-			} else if(
-				source[property] !== null &&
-				typeof source[property] === "object" &&
-				source[property].constructor === Object
-			) {
-				target[property] = _mergeProperties(target[property] || {}, source[property]);
-			} else {
-				target[property] = source[property];
-			}
-		}
-	}
+  for (var property in source) {
+    if (source.hasOwnProperty(property)) {
+      if (source[property] instanceof Array) {
+        target[property] = source[property].concat(target[property] instanceof Array ? target[property] : []);
+      } else if (
+        source[property] !== null &&
+        typeof source[property] === "object" &&
+          source[property].constructor === Object
+      ) {
+        target[property] = _mergeProperties(target[property] || {}, source[property]);
+      } else {
+        target[property] = source[property];
+      }
+    }
+  }
 
-	return target;
+  return target;
 }
 
 // Merge an arbitrary number of objects into one.
 function extend(target) {
-	for(var i = 1; i < arguments.length; i++) {
-		target = _mergeProperties(target, arguments[i]);
-	}
+  for (var i = 1; i < arguments.length; i++) {
+    target = _mergeProperties(target, arguments[i]);
+  }
 
-	return target;
+  return target;
 }
 
 /* The right word count in respect for CJK. */
 function wordCount(data) {
-	var pattern = /[a-zA-Z0-9_\u0392-\u03c9]+|[\u4E00-\u9FFF\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\uac00-\ud7af]+/g;
-	var m = data.match(pattern);
-	var count = 0;
-	if(m === null) return count;
-	for(var i = 0; i < m.length; i++) {
-		if(m[i].charCodeAt(0) >= 0x4E00) {
-			count += m[i].length;
-		} else {
-			count += 1;
-		}
-	}
-	return count;
+  var pattern = /[a-zA-Z0-9_\u0392-\u03c9]+|[\u4E00-\u9FFF\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\uac00-\ud7af]+/g;
+  var m = data.match(pattern);
+  var count = 0;
+  if (m === null) return count;
+  for (var i = 0; i < m.length; i++) {
+    if (m[i].charCodeAt(0) >= 0x4E00) {
+      count += m[i].length;
+    } else {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 
 var toolbarBuiltInButtons = {
-	"bold": {
-		name: "bold",
-		action: toggleBold,
-		className: "fa fa-bold",
-		title: "Bold (Ctrl+B)"
-	},
-	"italic": {
-		name: "italic",
-		action: toggleItalic,
-		className: "fa fa-italic",
-		title: "Italic (Ctrl+I)"
-	},
-	"strikethrough": {
-		name: "strikethrough",
-		action: toggleStrikethrough,
-		className: "fa fa-strikethrough",
-		title: "Strikethrough"
-	},
-	"heading": {
-		name: "heading",
-		action: toggleHeadingSmaller,
-		className: "fa fa-header",
-		title: "Heading"
-	},
-	"heading-smaller": {
-		name: "heading-smaller",
-		action: toggleHeadingSmaller,
-		className: "fa fa-header fa-header-x fa-header-smaller",
-		title: "Smaller Heading"
-	},
-	"heading-bigger": {
-		name: "heading-bigger",
-		action: toggleHeadingBigger,
-		className: "fa fa-header fa-header-x fa-header-bigger",
-		title: "Bigger Heading"
-	},
-	"heading-1": {
-		name: "heading-1",
-		action: toggleHeading1,
-		className: "fa fa-header fa-header-x fa-header-1",
-		title: "Big Heading"
-	},
-	"heading-2": {
-		name: "heading-2",
-		action: toggleHeading2,
-		className: "fa fa-header fa-header-x fa-header-2",
-		title: "Medium Heading"
-	},
-	"heading-3": {
-		name: "heading-3",
-		action: toggleHeading3,
-		className: "fa fa-header fa-header-x fa-header-3",
-		title: "Small Heading"
-	},
-	"heading-4": {
-		name: "heading-4",
-		action: toggleHeading4,
-		className: "fa fa-header fa-header-x fa-header-4",
-		title: "Small Heading"
-	},
-	"code": {
-		name: "code",
-		action: toggleCodeBlock,
-		className: "fa fa-code",
-		title: "Code (Ctrl+Alt+C)"
-	},
-	"quote": {
-		name: "quote",
-		action: toggleBlockquote,
-		className: "fa fa-quote-left",
-		title: "Quote (Ctrl+')"
-	},
-	"unordered-list": {
-		name: "unordered-list",
-		action: toggleUnorderedList,
-		className: "fa fa-list-ul",
-		title: "Generic List (Shift+Ctrl+U)"
-	},
-	"ordered-list": {
-		name: "ordered-list",
-		action: toggleOrderedList,
-		className: "fa fa-list-ol",
-		title: "Numbered List (Shift+Ctrl+O)"
-	},
-	"link": {
-		name: "link",
-		action: drawLink,
-		className: "fa fa-link",
-		title: "Create Link (Ctrl+K)"
-	},
-	"image": {
-		name: "image",
-		action: drawImage,
-		className: "fa fa-picture-o",
-		title: "Insert Image (Ctrl+Alt+I)"
-	},
-	"horizontal-rule": {
-		name: "horizontal-rule",
-		action: drawHorizontalRule,
-		className: "fa fa-minus",
-		title: "Insert Horizontal Line (Shift+Ctrl+H)"
-	},
-	"preview": {
-		name: "preview",
-		action: togglePreview,
-		className: "fa fa-eye no-disable",
-		title: "Toggle Preview (Ctrl+P)"
-	},
-	"side-by-side": {
-		name: "side-by-side",
-		action: toggleSideBySide,
-		className: "fa fa-columns no-disable no-mobile",
-		title: "Toggle Side by Side (Ctrl+Shift+P)"
-	},
-	"fullscreen": {
-		name: "fullscreen",
-		action: toggleFullScreen,
-		className: "fa fa-arrows-alt no-disable no-mobile",
-		title: "Toggle Fullscreen (F11)"
-	},
-	"guide": {
-		name: "guide",
-		action: "http://nextstepwebs.github.io/simplemde-markdown-editor/markdown-guide",
-		className: "fa fa-question-circle",
-		title: "Markdown Guide"
-	}
+  "bold": {
+    name: "bold",
+    action: toggleBold,
+    className: "fa fa-bold",
+    title: "Bold (Ctrl+B)"
+  },
+  "italic": {
+    name: "italic",
+    action: toggleItalic,
+    className: "fa fa-italic",
+    title: "Italic (Ctrl+I)"
+  },
+  "strikethrough": {
+    name: "strikethrough",
+    action: toggleStrikethrough,
+    className: "fa fa-strikethrough",
+    title: "Strikethrough"
+  },
+  "heading": {
+    name: "heading",
+    action: toggleHeadingSmaller,
+    className: "fa fa-header",
+    title: "Heading"
+  },
+  "heading-smaller": {
+    name: "heading-smaller",
+    action: toggleHeadingSmaller,
+    className: "fa fa-header fa-header-x fa-header-smaller",
+    title: "Smaller Heading"
+  },
+  "heading-bigger": {
+    name: "heading-bigger",
+    action: toggleHeadingBigger,
+    className: "fa fa-header fa-header-x fa-header-bigger",
+    title: "Bigger Heading"
+  },
+  "heading-1": {
+    name: "heading-1",
+    action: toggleHeading1,
+    className: "fa fa-header fa-header-x fa-header-1",
+    title: "Big Heading"
+  },
+  "heading-2": {
+    name: "heading-2",
+    action: toggleHeading2,
+    className: "fa fa-header fa-header-x fa-header-2",
+    title: "Medium Heading"
+  },
+  "heading-3": {
+    name: "heading-3",
+    action: toggleHeading3,
+    className: "fa fa-header fa-header-x fa-header-3",
+    title: "Small Heading"
+  },
+  "heading-4": {
+    name: "heading-4",
+    action: toggleHeading4,
+    className: "fa fa-header fa-header-x fa-header-4",
+    title: "Small Heading"
+  },
+  "code": {
+    name: "code",
+    action: toggleCodeBlock,
+    className: "fa fa-code",
+    title: "Code (Ctrl+Alt+C)"
+  },
+  "quote": {
+    name: "quote",
+    action: toggleBlockquote,
+    className: "fa fa-quote-left",
+    title: "Quote (Ctrl+')"
+  },
+  "unordered-list": {
+    name: "unordered-list",
+    action: toggleUnorderedList,
+    className: "fa fa-list-ul",
+    title: "Generic List (Shift+Ctrl+U)"
+  },
+  "ordered-list": {
+    name: "ordered-list",
+    action: toggleOrderedList,
+    className: "fa fa-list-ol",
+    title: "Numbered List (Shift+Ctrl+O)"
+  },
+  "link": {
+    name: "link",
+    action: drawLink,
+    className: "fa fa-link",
+    title: "Create Link (Ctrl+K)"
+  },
+  "image": {
+    name: "image",
+    action: drawImage,
+    className: "fa fa-picture-o",
+    title: "Insert Image (Ctrl+Alt+I)"
+  },
+  "horizontal-rule": {
+    name: "horizontal-rule",
+    action: drawHorizontalRule,
+    className: "fa fa-minus",
+    title: "Insert Horizontal Line (Shift+Ctrl+H)"
+  },
+  "preview": {
+    name: "preview",
+    action: togglePreview,
+    className: "fa fa-eye no-disable",
+    title: "Toggle Preview (Ctrl+E)"
+  },
+  "side-by-side": {
+    name: "side-by-side",
+    action: toggleSideBySide,
+    className: "fa fa-columns no-disable no-mobile",
+    title: "Toggle Side by Side (Ctrl+P)"
+  },
+  "fullscreen": {
+    name: "fullscreen",
+    action: toggleFullScreen,
+    className: "fa fa-arrows-alt no-disable no-mobile",
+    title: "Toggle Fullscreen (F11)"
+  },
+  "guide": {
+    name: "guide",
+    action: "http://nextstepwebs.github.io/simplemde-markdown-editor/markdown-guide",
+    className: "fa fa-question-circle",
+    title: "Markdown Guide"
+  }
 };
 
 var insertTexts = {
-	link: ["[", "](http://)"],
-	image: ["![](http://", ")"],
-	horizontalRule: ["", "\n\n-----\n\n"]
+  link: ["[", "](http://)"],
+  image: ["![](http://", ")"],
+  horizontalRule: ["", "\n\n-----\n\n"]
 };
 
 
@@ -890,114 +904,114 @@ var insertTexts = {
  * Interface of SimpleMDE.
  */
 function SimpleMDE(options) {
-	// Handle options parameter
-	options = options || {};
+  // Handle options parameter
+  options = options || {};
 
 
-	// Used later to refer to it"s parent
-	options.parent = this;
+  // Used later to refer to it"s parent
+  options.parent = this;
 
 
-	// Check if Font Awesome needs to be auto downloaded
-	var autoDownloadFA = true;
+  // Check if Font Awesome needs to be auto downloaded
+  var autoDownloadFA = true;
 
-	if(options.autoDownloadFontAwesome === false) {
-		autoDownloadFA = false;
-	}
+  if (options.autoDownloadFontAwesome === false) {
+    autoDownloadFA = false;
+  }
 
-	if(options.autoDownloadFontAwesome !== true) {
-		var styleSheets = document.styleSheets;
-		for(var i = 0; i < styleSheets.length; i++) {
-			if(!styleSheets[i].href)
-				continue;
+  if (options.autoDownloadFontAwesome !== true) {
+    var styleSheets = document.styleSheets;
+    for (var i = 0; i < styleSheets.length; i++) {
+      if (!styleSheets[i].href)
+        continue;
 
-			if(styleSheets[i].href.indexOf("//maxcdn.bootstrapcdn.com/font-awesome/") > -1) {
-				autoDownloadFA = false;
-			}
-		}
-	}
+      if (styleSheets[i].href.indexOf("//maxcdn.bootstrapcdn.com/font-awesome/") > -1) {
+        autoDownloadFA = false;
+      }
+    }
+  }
 
-	if(autoDownloadFA) {
-		var link = document.createElement("link");
-		link.rel = "stylesheet";
-		link.href = "https://maxcdn.bootstrapcdn.com/font-awesome/latest/css/font-awesome.min.css";
-		document.getElementsByTagName("head")[0].appendChild(link);
-	}
-
-
-	// Find the textarea to use
-	if(options.element) {
-		this.element = options.element;
-	} else if(options.element === null) {
-		// This means that the element option was specified, but no element was found
-		console.log("SimpleMDE: Error. No element was found.");
-		return;
-	}
+  if (autoDownloadFA) {
+    var link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://maxcdn.bootstrapcdn.com/font-awesome/latest/css/font-awesome.min.css";
+    document.getElementsByTagName("head")[0].appendChild(link);
+  }
 
 
-	// Handle toolbar and status bar
-	if(options.toolbar !== false)
-		options.toolbar = options.toolbar || SimpleMDE.toolbar;
-
-	if(!options.hasOwnProperty("status")) {
-		options.status = ["autosave", "lines", "words", "cursor"];
-	}
-
-
-	// Add default preview rendering function
-	if(!options.previewRender) {
-		options.previewRender = function(plainText) {
-			// Note: "this" refers to the options object
-			return this.parent.markdown(plainText);
-		};
-	}
+  // Find the textarea to use
+  if (options.element) {
+    this.element = options.element;
+  } else if (options.element === null) {
+    // This means that the element option was specified, but no element was found
+    console.log("SimpleMDE: Error. No element was found.");
+    return;
+  }
 
 
-	// Set default options for parsing config
-	options.parsingConfig = options.parsingConfig || {};
+  // Handle toolbar and status bar
+  if (options.toolbar !== false)
+    options.toolbar = options.toolbar || SimpleMDE.toolbar;
+
+  if (!options.hasOwnProperty("status")) {
+    options.status = ["autosave", "lines", "words", "cursor"];
+  }
 
 
-	// Merging the insertTexts, with the given options
-	options.insertTexts = extend({}, insertTexts, options.insertTexts || {});
+  // Add default preview rendering function
+  if (!options.previewRender) {
+    options.previewRender = function(plainText) {
+      // Note: "this" refers to the options object
+      return this.parent.markdown(plainText);
+    };
+  }
 
 
-	// Update this options
-	this.options = options;
-
-	this.emitter = new Emitter();
-
-	// Auto render
-	this.render();
+  // Set default options for parsing config
+  options.parsingConfig = options.parsingConfig || {};
 
 
-	// The codemirror component is only available after rendering
-	// so, the setter for the initialValue can only run after
-	// the element has been rendered
-	if(options.initialValue) {
-		this.value(options.initialValue);
-	}
+  // Merging the insertTexts, with the given options
+  options.insertTexts = extend({}, insertTexts, options.insertTexts || {});
 
-	// Initialize markdown-it
-	this.md = md({
-		linkify: true,
-		breaks: options.renderingConfig && options.renderingConfig.singleLineBreaks,
-		highlight: function(code, lang) {
-			try {
-				if(lang && hljs.getLanguage(lang)) {
-					return hljs.highlight(lang, code).value;
-				}
-				return hljs.highlightAuto(code).value;
-			} catch(__) {
-				return ""; // use external default escaping
-			}
-		}
-	});
 
-	/*
-	this.md.use(require("markdown-it-checkbox"), {
-		divWrap: true,
-		divClass: "ui checkbox"
-	});*/
+  // Update this options
+  this.options = options;
+
+  this.emitter = new Emitter();
+
+  // Auto render
+  this.render();
+
+  // The codemirror component is only available after rendering
+  // so, the setter for the initialValue can only run after
+  // the element has been rendered
+  if (options.initialValue) {
+    this.value(options.initialValue);
+  }
+
+  // Initialize markdown-it
+  this.md = md({
+    linkify: true,
+    breaks: options.renderingConfig && options.renderingConfig.singleLineBreaks,
+    highlight: function(code, lang) {
+      try {
+        if (lang && hljs.getLanguage(lang)) {
+          return hljs.highlight(lang, code).value;
+        }
+        return hljs.highlightAuto(code).value;
+      } catch (__) {
+        return ""; // use external default escaping
+      }
+    }
+  });
+
+  /*
+  this.md.use(require("markdown-it-checkbox"), {
+    divWrap: true,
+    divClass: "ui checkbox"
+  });
+  */
 }
 
 /**
@@ -1009,338 +1023,338 @@ SimpleMDE.toolbar = ["bold", "italic", "heading", "|", "quote", "unordered-list"
  * Default markdown render.
  */
 SimpleMDE.prototype.markdown = function(text) {
-	return this.md.render(text);
+  return this.md.render(text);
 };
 
 SimpleMDE.prototype.destroy = function() {
-	this.container.parentNode.removeChild(this.container);
-	this.toolbarContainer.parentNode.removeChild(this.toolbarContainer);
-	this.emitter.dispose();
+  this.container.parentNode.removeChild(this.container);
+  this.toolbarContainer.parentNode.removeChild(this.toolbarContainer);
+  this.emitter.dispose();
 };
 
 /**
  * Render editor to the given element.
  */
 SimpleMDE.prototype.render = function(el) {
-	if(!el) {
-		el = this.element || document.getElementsByTagName("textarea")[0];
-	}
+  if (!el) {
+    el = this.element || document.getElementsByTagName("textarea")[0];
+  }
 
-	if(this._rendered && this._rendered === el) {
-		// Already rendered.
-		return;
-	}
+  if (this._rendered && this._rendered === el) {
+    // Already rendered.
+    return;
+  }
 
-	this.element = el;
-	var options = this.options;
+  this.element = el;
+  var options = this.options;
 
-	var self = this;
-	var keyMaps = {};
+  var self = this;
+  var keyMaps = {};
 
-	for(var key in shortcuts) {
-		(function(key) {
-			keyMaps[fixShortcut(key)] = function() {
-				shortcuts[key](self);
-			};
-		})(key);
-	}
+  for (var key in shortcuts) {
+    (function(key) {
+      keyMaps[fixShortcut(key)] = function() {
+        shortcuts[key](self);
+      };
+    })(key);
+  }
 
-	keyMaps["Enter"] = "newlineAndIndentContinueMarkdownList";
-	keyMaps["Tab"] = "tabAndIndentMarkdownList";
-	keyMaps["Shift-Tab"] = "shiftTabAndUnindentMarkdownList";
-	keyMaps["F11"] = function() {
-		toggleFullScreen(self);
-	};
-	keyMaps["F9"] = function() {
-		toggleSideBySide(self);
-	};
-	/*
-		keyMaps["Esc"] = function(cm) {
-			if(cm.getOption("fullScreen")) toggleFullScreen(self);
-		};*/
+  keyMaps["Enter"] = "newlineAndIndentContinueMarkdownList";
+  keyMaps["Tab"] = "tabAndIndentMarkdownList";
+  keyMaps["Shift-Tab"] = "shiftTabAndUnindentMarkdownList";
+  keyMaps["F11"] = function() {
+    toggleFullScreen(self);
+  };
+  keyMaps["F9"] = function() {
+    toggleSideBySide(self);
+  };
+  /*
+     keyMaps["Esc"] = function(cm) {
+     if(cm.getOption("fullScreen")) toggleFullScreen(self);
+     };*/
 
-	var mode, backdrop;
-	if(options.spellChecker !== false) {
-		mode = "spell-checker";
-		backdrop = options.parsingConfig;
-		backdrop.name = "gfm";
-		backdrop.gitHubSpice = false;
-	} else {
-		mode = options.parsingConfig;
-		mode.name = "gfm";
-		mode.highlightFormatting = true;
-		mode.gitHubSpice = false;
-	}
+  var mode, backdrop;
+  if (options.spellChecker !== false) {
+    mode = "spell-checker";
+    backdrop = options.parsingConfig;
+    backdrop.name = "gfm";
+    backdrop.gitHubSpice = false;
+  } else {
+    mode = options.parsingConfig;
+    mode.name = "gfm";
+    mode.highlightFormatting = true;
+    mode.gitHubSpice = false;
+  }
 
-	this.codemirror = CodeMirror.fromTextArea(el, {
-		mode: mode,
-		showCursorWhenSelecting: true,
-		backdrop: backdrop,
-		placeholder: options.placeholder || "",
-		theme: options.theme || "solarized-dark",
-		tabSize: (options.tabSize != undefined) ? options.tabSize : 2,
-		indentUnit: (options.tabSize != undefined) ? options.tabSize : 2,
-		indentWithTabs: (options.indentWithTabs === false) ? false : true,
-		lineNumbers: false,
-		autofocus: (options.autofocus === true) ? true : false,
-		extraKeys: keyMaps,
-		lineWrapping: (options.lineWrapping === false) ? false : true,
-		allowDropFileTypes: ["text/plain"],
-		viewportMargin: 10,
-		matchBrackets: true
-	});
+  this.codemirror = CodeMirror.fromTextArea(el, {
+    mode: mode,
+    showCursorWhenSelecting: true,
+    backdrop: backdrop,
+    placeholder: options.placeholder || "",
+    theme: options.theme || "solarized-dark",
+    tabSize: (options.tabSize != undefined) ? options.tabSize : 2,
+    indentUnit: (options.tabSize != undefined) ? options.tabSize : 2,
+    indentWithTabs: (options.indentWithTabs === false) ? false : true,
+    lineNumbers: false,
+    autofocus: (options.autofocus === true) ? true : false,
+    extraKeys: keyMaps,
+    lineWrapping: (options.lineWrapping === false) ? false : true,
+    allowDropFileTypes: ["text/plain"],
+    viewportMargin: 10,
+    matchBrackets: true
+  });
 
-	var container = document.createElement("div");
-	container.className = "editor-container";
-	container.appendChild(this.codemirror.getWrapperElement());
-	el.parentNode.insertBefore(container, el.nextSibling);
-	this.container = container;
+  var container = document.createElement("div");
+  container.className = "editor-container";
+  container.appendChild(this.codemirror.getWrapperElement());
+  el.parentNode.insertBefore(container, el.nextSibling);
+  this.container = container;
 
-	if(options.toolbar !== false) {
-		this.toolbarContainer = this.createToolbar();
-	}
-	if(options.status !== false) {
-		this.createStatusbar();
-	}
-	if(options.autosave != undefined && options.autosave.enabled === true) {
-		this.autosave();
-	}
+  if (options.toolbar !== false) {
+    this.toolbarContainer = this.createToolbar();
+  }
+  if (options.status !== false) {
+    this.createStatusbar();
+  }
+  if (options.autosave != undefined && options.autosave.enabled === true) {
+    this.autosave();
+  }
 
-	this.createSideBySide();
+  this.createSideBySide();
 
-	this._rendered = this.element;
+  this._rendered = this.element;
 };
 
 SimpleMDE.prototype.autosave = function() {
-	var content = this.value();
-	var simplemde = this;
+  var content = this.value();
+  var simplemde = this;
 
-	if(this.options.autosave.unique_id == undefined || this.options.autosave.unique_id == "") {
-		console.log("SimpleMDE: You must set a unique_id to use the autosave feature");
-		return;
-	}
+  if (this.options.autosave.unique_id == undefined || this.options.autosave.unique_id == "") {
+    console.log("SimpleMDE: You must set a unique_id to use the autosave feature");
+    return;
+  }
 
-	if(simplemde.element.form != null && simplemde.element.form != undefined) {
-		simplemde.element.form.addEventListener("submit", function() {
-			localStorage.setItem(simplemde.options.autosave.unique_id, "");
-		});
-	}
+  if (simplemde.element.form != null && simplemde.element.form != undefined) {
+    simplemde.element.form.addEventListener("submit", function() {
+      localStorage.setItem(simplemde.options.autosave.unique_id, "");
+    });
+  }
 
-	if(this.options.autosave.loaded !== true) {
-		if(typeof localStorage.getItem(this.options.autosave.unique_id) == "string" && localStorage.getItem(this.options.autosave.unique_id) != "")
-			this.codemirror.setValue(localStorage.getItem(this.options.autosave.unique_id));
+  if (this.options.autosave.loaded !== true) {
+    if (typeof localStorage.getItem(this.options.autosave.unique_id) == "string" && localStorage.getItem(this.options.autosave.unique_id) != "")
+      this.codemirror.setValue(localStorage.getItem(this.options.autosave.unique_id));
 
-		this.options.autosave.loaded = true;
-	}
+    this.options.autosave.loaded = true;
+  }
 
-	if(localStorage) {
-		localStorage.setItem(this.options.autosave.unique_id, content);
-	}
+  if (localStorage) {
+    localStorage.setItem(this.options.autosave.unique_id, content);
+  }
 
-	var el = document.getElementById("autosaved");
-	if(el != null && el != undefined && el != "") {
-		var d = new Date();
-		var hh = d.getHours();
-		var m = d.getMinutes();
-		var dd = "am";
-		var h = hh;
-		if(h >= 12) {
-			h = hh - 12;
-			dd = "pm";
-		}
-		if(h == 0) {
-			h = 12;
-		}
-		m = m < 10 ? "0" + m : m;
+  var el = document.getElementById("autosaved");
+  if (el != null && el != undefined && el != "") {
+    var d = new Date();
+    var hh = d.getHours();
+    var m = d.getMinutes();
+    var dd = "am";
+    var h = hh;
+    if (h >= 12) {
+      h = hh - 12;
+      dd = "pm";
+    }
+    if (h == 0) {
+      h = 12;
+    }
+    m = m < 10 ? "0" + m : m;
 
-		el.innerHTML = "Autosaved: " + h + ":" + m + " " + dd;
-	}
+    el.innerHTML = "Autosaved: " + h + ":" + m + " " + dd;
+  }
 
-	setTimeout(function() {
-		simplemde.autosave();
-	}, this.options.autosave.delay || 10000);
+  setTimeout(function() {
+    simplemde.autosave();
+  }, this.options.autosave.delay || 10000);
 };
 
 SimpleMDE.prototype.createSideBySide = function() {
-	var cm = this.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.nextSibling;
+  var cm = this.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
 
-	if(!preview || !/editor-preview-side/.test(preview.className)) {
-		preview = document.createElement("div");
-		preview.className = "editor-preview-side markdown-body";
-		wrapper.parentNode.insertBefore(preview, wrapper.nextSibling);
-	}
+  if (!preview || !/editor-preview-side/.test(preview.className)) {
+    preview = document.createElement("div");
+    preview.className = "editor-preview-side markdown-body";
+    wrapper.parentNode.insertBefore(preview, wrapper.nextSibling);
+  }
 
-	// Syncs scroll	editor -> preview
-	var cScroll = false;
-	var pScroll = false;
-	cm.on("scroll", function(v) {
-		if(cScroll) {
-			cScroll = false;
-			return;
-		}
-		pScroll = true;
-		var height = v.getScrollInfo().height - v.getScrollInfo().clientHeight;
-		var ratio = parseFloat(v.getScrollInfo().top) / height;
-		var move = (preview.scrollHeight - preview.clientHeight) * ratio;
-		preview.scrollTop = move;
-	});
+  // Syncs scroll	editor -> preview
+  var cScroll = false;
+  var pScroll = false;
+  cm.on("scroll", function(v) {
+    if (cScroll) {
+      cScroll = false;
+      return;
+    }
+    pScroll = true;
+    var height = v.getScrollInfo().height - v.getScrollInfo().clientHeight;
+    var ratio = parseFloat(v.getScrollInfo().top) / height;
+    var move = (preview.scrollHeight - preview.clientHeight) * ratio;
+    preview.scrollTop = move;
+  });
 
-	// Syncs scroll	preview -> editor
-	preview.onscroll = function() {
-		if(pScroll) {
-			pScroll = false;
-			return;
-		}
-		cScroll = true;
-		var height = preview.scrollHeight - preview.clientHeight;
-		var ratio = parseFloat(preview.scrollTop) / height;
-		var move = (cm.getScrollInfo().height - cm.getScrollInfo().clientHeight) * ratio;
-		cm.scrollTo(0, move);
-	};
-	return true;
+  // Syncs scroll	preview -> editor
+  preview.onscroll = function() {
+    if (pScroll) {
+      pScroll = false;
+      return;
+    }
+    cScroll = true;
+    var height = preview.scrollHeight - preview.clientHeight;
+    var ratio = parseFloat(preview.scrollTop) / height;
+    var move = (cm.getScrollInfo().height - cm.getScrollInfo().clientHeight) * ratio;
+    cm.scrollTo(0, move);
+  };
+  return true;
 };
 
 SimpleMDE.prototype.createToolbar = function(items) {
-	items = items || this.options.toolbar;
+  items = items || this.options.toolbar;
 
-	if(!items || items.length === 0) {
-		return;
-	}
-	var i;
-	for(i = 0; i < items.length; i++) {
-		if(toolbarBuiltInButtons[items[i]] != undefined) {
-			items[i] = toolbarBuiltInButtons[items[i]];
-		}
-	}
+  if (!items || items.length === 0) {
+    return;
+  }
+  var i;
+  for (i = 0; i < items.length; i++) {
+    if (toolbarBuiltInButtons[items[i]] != undefined) {
+      items[i] = toolbarBuiltInButtons[items[i]];
+    }
+  }
 
-	var bar = document.createElement("div");
-	bar.className = "editor-toolbar";
+  var bar = document.createElement("div");
+  bar.className = "editor-toolbar";
 
-	var self = this;
+  var self = this;
 
-	var toolbar_data = {};
-	self.toolbar = items;
+  var toolbar_data = {};
+  self.toolbar = items;
 
-	for(i = 0; i < items.length; i++) {
-		if(items[i].name == "guide" && self.options.toolbarGuideIcon === false)
-			continue;
+  for (i = 0; i < items.length; i++) {
+    if (items[i].name == "guide" && self.options.toolbarGuideIcon === false)
+      continue;
 
-		if(self.options.hideIcons && self.options.hideIcons.indexOf(items[i].name) != -1)
-			continue;
+    if (self.options.hideIcons && self.options.hideIcons.indexOf(items[i].name) != -1)
+      continue;
 
-		// Fullscreen does not work well on mobile devices (even tablets)
-		// In the future, hopefully this can be resolved
-		if((items[i].name == "fullscreen" || items[i].name == "side-by-side") && isMobile())
-			continue;
+    // Fullscreen does not work well on mobile devices (even tablets)
+    // In the future, hopefully this can be resolved
+    if ((items[i].name == "fullscreen" || items[i].name == "side-by-side") && isMobile())
+      continue;
 
-		(function(item) {
-			var el;
-			if(item === "|") {
-				el = createSep();
-			} else {
-				el = createIcon(item, self.options.toolbarTips);
-			}
+    (function(item) {
+      var el;
+      if (item === "|") {
+        el = createSep();
+      } else {
+        el = createIcon(item, self.options.toolbarTips);
+      }
 
-			// bind events, special for info
-			if(item.action) {
-				if(typeof item.action === "function") {
-					el.onclick = function() {
-						item.action(self);
-					};
-				} else if(typeof item.action === "string") {
-					el.href = item.action;
-					el.target = "_blank";
-				}
-			}
-			toolbar_data[item.name || item] = el;
-			bar.appendChild(el);
-		})(items[i]);
-	}
+      // bind events, special for info
+      if (item.action) {
+        if (typeof item.action === "function") {
+          el.onclick = function() {
+            item.action(self);
+          };
+        } else if (typeof item.action === "string") {
+          el.href = item.action;
+          el.target = "_blank";
+        }
+      }
+      toolbar_data[item.name || item] = el;
+      bar.appendChild(el);
+    })(items[i]);
+  }
 
-	self.toolbarElements = toolbar_data;
+  self.toolbarElements = toolbar_data;
 
-	var cm = this.codemirror;
-	cm.on("cursorActivity", function() {
-		var stat = getState(cm);
+  var cm = this.codemirror;
+  cm.on("cursorActivity", function() {
+    var stat = getState(cm);
 
-		for(var key in toolbar_data) {
-			(function(key) {
-				var el = toolbar_data[key];
-				if(stat[key]) {
-					el.className += " active";
-				} else if(key != "fullscreen" && key != "side-by-side") {
-					el.className = el.className.replace(/\s*active\s*/g, "");
-				}
-			})(key);
-		}
-	});
+    for (var key in toolbar_data) {
+      (function(key) {
+        var el = toolbar_data[key];
+        if (stat[key]) {
+          el.className += " active";
+        } else if (key != "fullscreen" && key != "preview" && key != "side-by-side") {
+          el.className = el.className.replace(/\s*active\s*/g, "");
+        }
+      })(key);
+    }
+  });
 
-	this.element.parentNode.insertBefore(bar, this.container);
-	return bar;
+  this.element.parentNode.insertBefore(bar, this.container);
+  return bar;
 };
 
 SimpleMDE.prototype.createStatusbar = function(status) {
-	status = status || this.options.status;
-	var options = this.options;
+  status = status || this.options.status;
+  var options = this.options;
 
-	if(!status || status.length === 0) return;
+  if (!status || status.length === 0) return;
 
-	var bar = document.createElement("div");
-	bar.className = "editor-statusbar";
+  var bar = document.createElement("div");
+  bar.className = "editor-statusbar";
 
-	var pos, cm = this.codemirror;
-	for(var i = 0; i < status.length; i++) {
-		(function(name) {
-			var el = document.createElement("span");
-			el.className = name;
-			if(name === "words") {
-				el.innerHTML = "0";
-				cm.on("update", function() {
-					el.innerHTML = wordCount(cm.getValue());
-				});
-			} else if(name === "lines") {
-				el.innerHTML = "0";
-				cm.on("update", function() {
-					el.innerHTML = cm.lineCount();
-				});
-			} else if(name === "cursor") {
-				el.innerHTML = "0:0";
-				cm.on("cursorActivity", function() {
-					pos = cm.getCursor();
-					el.innerHTML = pos.line + ":" + pos.ch;
-				});
-			} else if(name === "autosave") {
-				if(options.autosave != undefined && options.autosave.enabled === true) {
-					el.setAttribute("id", "autosaved");
-				}
-			}
-			bar.appendChild(el);
-		})(status[i]);
-	}
+  var pos, cm = this.codemirror;
+  for (var i = 0; i < status.length; i++) {
+    (function(name) {
+      var el = document.createElement("span");
+      el.className = name;
+      if (name === "words") {
+        el.innerHTML = "0";
+        cm.on("update", function() {
+          el.innerHTML = wordCount(cm.getValue());
+        });
+      } else if (name === "lines") {
+        el.innerHTML = "0";
+        cm.on("update", function() {
+          el.innerHTML = cm.lineCount();
+        });
+      } else if (name === "cursor") {
+        el.innerHTML = "0:0";
+        cm.on("cursorActivity", function() {
+          pos = cm.getCursor();
+          el.innerHTML = pos.line + ":" + pos.ch;
+        });
+      } else if (name === "autosave") {
+        if (options.autosave != undefined && options.autosave.enabled === true) {
+          el.setAttribute("id", "autosaved");
+        }
+      }
+      bar.appendChild(el);
+    })(status[i]);
+  }
 
-	var cmWrapper = this.codemirror.getWrapperElement();
-	cmWrapper.parentNode.insertBefore(bar, cmWrapper.nextSibling);
-	return bar;
+  var cmWrapper = this.codemirror.getWrapperElement();
+  cmWrapper.parentNode.insertBefore(bar, cmWrapper.nextSibling);
+  return bar;
 };
 
 /**
- * Get or set the text content.
- */
+* Get or set the text content.
+*/
 SimpleMDE.prototype.value = function(val) {
-	if(val === undefined) {
-		return this.codemirror.getValue();
-	} else {
-		this.codemirror.getDoc().setValue(val);
-		return this;
-	}
+  if (val === undefined) {
+    return this.codemirror.getValue();
+  } else {
+    this.codemirror.getDoc().setValue(val);
+    return this;
+  }
 };
 
 
 /**
- * Bind static methods for exports.
- */
+* Bind static methods for exports.
+*/
 SimpleMDE.toggleBold = toggleBold;
 SimpleMDE.toggleItalic = toggleItalic;
 SimpleMDE.toggleStrikethrough = toggleStrikethrough;
@@ -1360,6 +1374,8 @@ SimpleMDE.drawHorizontalRule = drawHorizontalRule;
 SimpleMDE.undo = undo;
 SimpleMDE.redo = redo;
 SimpleMDE.togglePreview = togglePreview;
+SimpleMDE.showPreview = showPreview;
+SimpleMDE.hidePreview = hidePreview;
 SimpleMDE.toggleSideBySide = toggleSideBySide;
 SimpleMDE.toggleFullScreen = toggleFullScreen;
 
@@ -1367,108 +1383,114 @@ SimpleMDE.toggleFullScreen = toggleFullScreen;
  * Bind instance methods for exports.
  */
 SimpleMDE.prototype.toggleBold = function() {
-	toggleBold(this);
+  toggleBold(this);
 };
 SimpleMDE.prototype.toggleItalic = function() {
-	toggleItalic(this);
+  toggleItalic(this);
 };
 SimpleMDE.prototype.toggleStrikethrough = function() {
-	toggleStrikethrough(this);
+  toggleStrikethrough(this);
 };
 SimpleMDE.prototype.toggleBlockquote = function() {
-	toggleBlockquote(this);
+  toggleBlockquote(this);
 };
 SimpleMDE.prototype.toggleHeadingSmaller = function() {
-	toggleHeadingSmaller(this);
+  toggleHeadingSmaller(this);
 };
 SimpleMDE.prototype.toggleHeadingBigger = function() {
-	toggleHeadingBigger(this);
+  toggleHeadingBigger(this);
 };
 SimpleMDE.prototype.toggleHeading1 = function() {
-	toggleHeading1(this);
+  toggleHeading1(this);
 };
 SimpleMDE.prototype.toggleHeading2 = function() {
-	toggleHeading2(this);
+  toggleHeading2(this);
 };
 SimpleMDE.prototype.toggleHeading3 = function() {
-	toggleHeading3(this);
+  toggleHeading3(this);
 };
 SimpleMDE.prototype.toggleHeading4 = function() {
-	toggleHeading4(this);
+  toggleHeading4(this);
 };
 SimpleMDE.prototype.toggleCodeBlock = function() {
-	toggleCodeBlock(this);
+  toggleCodeBlock(this);
 };
 SimpleMDE.prototype.toggleUnorderedList = function() {
-	toggleUnorderedList(this);
+  toggleUnorderedList(this);
 };
 SimpleMDE.prototype.toggleOrderedList = function() {
-	toggleOrderedList(this);
+  toggleOrderedList(this);
 };
 SimpleMDE.prototype.drawLink = function() {
-	drawLink(this);
+  drawLink(this);
 };
 SimpleMDE.prototype.drawImage = function() {
-	drawImage(this);
+  drawImage(this);
 };
 SimpleMDE.prototype.drawHorizontalRule = function() {
-	drawHorizontalRule(this);
+  drawHorizontalRule(this);
 };
 SimpleMDE.prototype.undo = function() {
-	undo(this);
+  undo(this);
 };
 SimpleMDE.prototype.redo = function() {
-	redo(this);
+  redo(this);
 };
 SimpleMDE.prototype.togglePreview = function() {
-	togglePreview(this);
+  togglePreview(this);
+};
+SimpleMDE.prototype.showPreview = function() {
+  showPreview(this);
+};
+SimpleMDE.prototype.hidePreview = function() {
+  hidePreview(this);
 };
 SimpleMDE.prototype.toggleSideBySide = function() {
-	toggleSideBySide(this);
+  toggleSideBySide(this);
 };
 SimpleMDE.prototype.toggleFullScreen = function() {
-	toggleFullScreen(this);
+  toggleFullScreen(this);
 };
 
 SimpleMDE.prototype.isPreviewActive = function() {
-	var cm = this.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.lastChild;
+  var cm = this.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.lastChild;
 
-	return /editor-preview-active/.test(preview.className);
+  return /editor-preview-active/.test(preview.className);
 };
 
 SimpleMDE.prototype.isSideBySideActive = function() {
-	var cm = this.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.nextSibling;
+  var cm = this.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
 
-	return /editor-preview-active-side/.test(preview.className);
+  return /editor-preview-active-side/.test(preview.className);
 };
 
 SimpleMDE.prototype.isFullscreenActive = function() {
-	var cm = this.codemirror;
+  var cm = this.codemirror;
 
-	return cm.getOption("fullScreen");
+  return cm.getOption("fullScreen");
 };
 
 SimpleMDE.prototype.updatePreview = function() {
-	var cm = this.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.nextSibling;
+  var cm = this.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
 
-	preview.innerHTML = this.options.previewRender(this.value(), preview);
-	this.emitter.emit("did-update-preview", this);
+  preview.innerHTML = this.options.previewRender(this.value(), preview);
+  this.emitter.emit("did-update-preview", this);
 };
 
 SimpleMDE.prototype.getPreview = function() {
-	var cm = this.codemirror;
-	var wrapper = cm.getWrapperElement();
-	return wrapper.nextSibling;
+  var cm = this.codemirror;
+  var wrapper = cm.getWrapperElement();
+  return wrapper.nextSibling;
 };
 
 SimpleMDE.prototype.onDidUpdatePreview = function(callback) {
-	return this.emitter.on("did-update-preview", callback);
+  return this.emitter.on("did-update-preview", callback);
 };
 
 module.exports = SimpleMDE;

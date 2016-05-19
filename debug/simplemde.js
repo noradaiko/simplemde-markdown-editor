@@ -6,7 +6,7 @@
  */
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.SimpleMDE = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 (function (global){
-/*! https://mths.be/punycode v1.3.2 by @mathias */
+/*! https://mths.be/punycode v1.4.1 by @mathias */
 ;(function(root) {
 
 	/** Detect free variables */
@@ -72,7 +72,7 @@
 	 * @returns {Error} Throws a `RangeError` with the applicable error message.
 	 */
 	function error(type) {
-		throw RangeError(errors[type]);
+		throw new RangeError(errors[type]);
 	}
 
 	/**
@@ -219,7 +219,7 @@
 
 	/**
 	 * Bias adaptation function as per section 3.4 of RFC 3492.
-	 * http://tools.ietf.org/html/rfc3492#section-3.4
+	 * https://tools.ietf.org/html/rfc3492#section-3.4
 	 * @private
 	 */
 	function adapt(delta, numPoints, firstTime) {
@@ -494,7 +494,7 @@
 		 * @memberOf punycode
 		 * @type String
 		 */
-		'version': '1.3.2',
+		'version': '1.4.1',
 		/**
 		 * An object of methods to convert from JavaScript's internal character
 		 * representation (UCS-2) to Unicode code points, and back.
@@ -524,14 +524,17 @@
 			return punycode;
 		});
 	} else if (freeExports && freeModule) {
-		if (module.exports == freeExports) { // in Node.js or RingoJS v0.8.0+
+		if (module.exports == freeExports) {
+			// in Node.js, io.js, or RingoJS v0.8.0+
 			freeModule.exports = punycode;
-		} else { // in Narwhal or RingoJS v0.7.0-
+		} else {
+			// in Narwhal or RingoJS v0.7.0-
 			for (key in punycode) {
 				punycode.hasOwnProperty(key) && (freeExports[key] = punycode[key]);
 			}
 		}
-	} else { // in Rhino or a web browser
+	} else {
+		// in Rhino or a web browser
 		root.punycode = punycode;
 	}
 
@@ -1752,6 +1755,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
   // This is woefully incomplete. Suggestions for alternative methods welcome.
   var mobile = ios || /Android|webOS|BlackBerry|Opera Mini|Opera Mobi|IEMobile/i.test(userAgent);
   var mac = ios || /Mac/.test(platform);
+  var chromeOS = /\bCrOS\b/.test(userAgent);
   var windows = /win/i.test(platform);
 
   var presto_version = presto && userAgent.match(/Version\/(\d*\.\d*)/);
@@ -2806,9 +2810,9 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     if (!cm.state.focused) { cm.display.input.focus(); onFocus(cm); }
   }
 
-  // This will be set to an array of strings when copying, so that,
-  // when pasting, we know what kind of selections the copied text
-  // was made out of.
+  // This will be set to a {lineWise: bool, text: [string]} object, so
+  // that, when pasting, we know what kind of selections the copied
+  // text was made out of.
   var lastCopied = null;
 
   function applyTextInput(cm, inserted, deleted, sel, origin) {
@@ -2817,14 +2821,15 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     if (!sel) sel = doc.sel;
 
     var paste = cm.state.pasteIncoming || origin == "paste";
-    var textLines = doc.splitLines(inserted), multiPaste = null;
+    var textLines = doc.splitLines(inserted), multiPaste = null, lineWisePaste = false;
     // When pasing N lines into N selections, insert one line per selection
     if (paste && sel.ranges.length > 1) {
-      if (lastCopied && lastCopied.join("\n") == inserted) {
-        if (sel.ranges.length % lastCopied.length == 0) {
+      if (lastCopied && lastCopied.text.join("\n") == inserted) {
+        lineWisePaste = lastCopied.lineWise
+        if (sel.ranges.length % lastCopied.text.length == 0) {
           multiPaste = [];
-          for (var i = 0; i < lastCopied.length; i++)
-            multiPaste.push(doc.splitLines(lastCopied[i]));
+          for (var i = 0; i < lastCopied.text.length; i++)
+            multiPaste.push(doc.splitLines(lastCopied.text[i]));
         }
       } else if (textLines.length == sel.ranges.length) {
         multiPaste = map(textLines, function(l) { return [l]; });
@@ -2840,6 +2845,8 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
           from = Pos(from.line, from.ch - deleted);
         else if (cm.state.overwrite && !paste) // Handle overwrite
           to = Pos(to.line, Math.min(getLine(doc, to.line).text.length, to.ch + lst(textLines).length));
+        else if (lineWisePaste)
+          from = to = Pos(from.line, 0)
       }
       var updateInput = cm.curOp.updateInput;
       var changeEvent = {from: from, to: to, text: multiPaste ? multiPaste[i % multiPaste.length] : textLines,
@@ -2972,18 +2979,18 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       function prepareCopyCut(e) {
         if (signalDOMEvent(cm, e)) return
         if (cm.somethingSelected()) {
-          lastCopied = cm.getSelections();
+          lastCopied = {lineWise: false, text: cm.getSelections()};
           if (input.inaccurateSelection) {
             input.prevInput = "";
             input.inaccurateSelection = false;
-            te.value = lastCopied.join("\n");
+            te.value = lastCopied.text.join("\n");
             selectInput(te);
           }
         } else if (!cm.options.lineWiseCopyCut) {
           return;
         } else {
           var ranges = copyableRanges(cm);
-          lastCopied = ranges.text;
+          lastCopied = {lineWise: true, text: ranges.text};
           if (e.type == "cut") {
             cm.setSelections(ranges.ranges, null, sel_dontScroll);
           } else {
@@ -3331,13 +3338,13 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       function onCopyCut(e) {
         if (signalDOMEvent(cm, e)) return
         if (cm.somethingSelected()) {
-          lastCopied = cm.getSelections();
+          lastCopied = {lineWise: false, text: cm.getSelections()};
           if (e.type == "cut") cm.replaceSelection("", null, "cut");
         } else if (!cm.options.lineWiseCopyCut) {
           return;
         } else {
           var ranges = copyableRanges(cm);
-          lastCopied = ranges.text;
+          lastCopied = {lineWise: true, text: ranges.text};
           if (e.type == "cut") {
             cm.operation(function() {
               cm.setSelections(ranges.ranges, 0, sel_dontScroll);
@@ -3349,12 +3356,12 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
         if (e.clipboardData && !ios) {
           e.preventDefault();
           e.clipboardData.clearData();
-          e.clipboardData.setData("text/plain", lastCopied.join("\n"));
+          e.clipboardData.setData("text/plain", lastCopied.text.join("\n"));
         } else {
           // Old-fashioned briefly-focus-a-textarea hack
           var kludge = hiddenTextarea(), te = kludge.firstChild;
           cm.display.lineSpace.insertBefore(kludge, cm.display.lineSpace.firstChild);
-          te.value = lastCopied.join("\n");
+          te.value = lastCopied.text.join("\n");
           var hadFocus = document.activeElement;
           selectInput(te);
           setTimeout(function() {
@@ -3373,9 +3380,9 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       return result;
     },
 
-    showSelection: function(info) {
+    showSelection: function(info, takeFocus) {
       if (!info || !this.cm.display.view.length) return;
-      if (info.focus) this.showPrimarySelection();
+      if (info.focus || takeFocus) this.showPrimarySelection();
       this.showMultipleSelections(info);
     },
 
@@ -4811,7 +4818,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     }
 
     if (op.updatedDisplay || op.selectionChanged)
-      op.preparedSelection = display.input.prepareSelection();
+      op.preparedSelection = display.input.prepareSelection(op.focus);
   }
 
   function endOperation_W2(op) {
@@ -4824,8 +4831,9 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       cm.display.maxLineChanged = false;
     }
 
+    var takeFocus = op.focus && op.focus == activeElt() && (!document.hasFocus || document.hasFocus())
     if (op.preparedSelection)
-      cm.display.input.showSelection(op.preparedSelection);
+      cm.display.input.showSelection(op.preparedSelection, takeFocus);
     if (op.updatedDisplay || op.startHeight != cm.doc.height)
       updateScrollbars(cm, op.barMeasure);
     if (op.updatedDisplay)
@@ -4835,8 +4843,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
 
     if (cm.state.focused && op.updateInput)
       cm.display.input.reset(op.typing);
-    if (op.focus && op.focus == activeElt() && (!document.hasFocus || document.hasFocus()))
-      ensureFocus(op.cm);
+    if (takeFocus) ensureFocus(op.cm);
   }
 
   function endOperation_finish(op) {
@@ -5391,7 +5398,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       ourIndex = doc.sel.primIndex;
     }
 
-    if (e.altKey) {
+    if (chromeOS ? e.shiftKey && e.metaKey : e.altKey) {
       type = "rect";
       if (!addNew) ourRange = new Range(start, start);
       start = posFromMouse(cm, e, true, true);
@@ -5616,6 +5623,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     if (signalDOMEvent(cm, e) || eventInWidget(cm.display, e)) return;
 
     e.dataTransfer.setData("Text", cm.getSelection());
+    e.dataTransfer.effectAllowed = "copyMove"
 
     // Use dummy image instead of default browsers image.
     // Recent Safari (~6.0.2) have a tendency to segfault when this happens, so we don't do it there.
@@ -7101,7 +7109,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     for (var i = newBreaks.length - 1; i >= 0; i--)
       replaceRange(cm.doc, val, newBreaks[i], Pos(newBreaks[i].line, newBreaks[i].ch + val.length))
   });
-  option("specialChars", /[\t\u0000-\u0019\u00ad\u200b-\u200f\u2028\u2029\ufeff]/g, function(cm, val, old) {
+  option("specialChars", /[\u0000-\u001f\u007f\u00ad\u200b-\u200f\u2028\u2029\ufeff]/g, function(cm, val, old) {
     cm.state.specialChars = new RegExp(val.source + (val.test("\t") ? "" : "|\t"), "g");
     if (old != CodeMirror.Init) cm.refresh();
   });
@@ -7430,7 +7438,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       for (var i = 0; i < ranges.length; i++) {
         var pos = ranges[i].from();
         var col = countColumn(cm.getLine(pos.line), pos.ch, tabSize);
-        spaces.push(new Array(tabSize - col % tabSize + 1).join(" "));
+        spaces.push(spaceStr(tabSize - col % tabSize));
       }
       cm.replaceSelections(spaces);
     },
@@ -7473,6 +7481,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
         ensureCursorVisible(cm);
       });
     },
+    openLine: function(cm) {cm.replaceSelection("\n", "start")},
     toggleOverwrite: function(cm) {cm.toggleOverwrite();}
   };
 
@@ -7507,7 +7516,8 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     "Ctrl-F": "goCharRight", "Ctrl-B": "goCharLeft", "Ctrl-P": "goLineUp", "Ctrl-N": "goLineDown",
     "Alt-F": "goWordRight", "Alt-B": "goWordLeft", "Ctrl-A": "goLineStart", "Ctrl-E": "goLineEnd",
     "Ctrl-V": "goPageDown", "Shift-Ctrl-V": "goPageUp", "Ctrl-D": "delCharAfter", "Ctrl-H": "delCharBefore",
-    "Alt-D": "delWordAfter", "Alt-Backspace": "delWordBefore", "Ctrl-K": "killLine", "Ctrl-T": "transposeChars"
+    "Alt-D": "delWordAfter", "Alt-Backspace": "delWordBefore", "Ctrl-K": "killLine", "Ctrl-T": "transposeChars",
+    "Ctrl-O": "openLine"
   };
   keyMap.macDefault = {
     "Cmd-A": "selectAll", "Cmd-D": "deleteLine", "Cmd-Z": "undo", "Shift-Cmd-Z": "redo", "Cmd-Y": "redo",
@@ -8269,8 +8279,8 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       var fromCmp = cmp(found.from, from) || extraLeft(sp.marker) - extraLeft(marker);
       var toCmp = cmp(found.to, to) || extraRight(sp.marker) - extraRight(marker);
       if (fromCmp >= 0 && toCmp <= 0 || fromCmp <= 0 && toCmp >= 0) continue;
-      if (fromCmp <= 0 && (cmp(found.to, from) > 0 || (sp.marker.inclusiveRight && marker.inclusiveLeft)) ||
-          fromCmp >= 0 && (cmp(found.from, to) < 0 || (sp.marker.inclusiveLeft && marker.inclusiveRight)))
+      if (fromCmp <= 0 && (sp.marker.inclusiveRight && marker.inclusiveLeft ? cmp(found.to, from) >= 0 : cmp(found.to, from) > 0) ||
+          fromCmp >= 0 && (sp.marker.inclusiveRight && marker.inclusiveLeft ? cmp(found.from, to) <= 0 : cmp(found.from, to) < 0))
         return true;
     }
   }
@@ -8672,8 +8682,11 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     }
 
     // See issue #2901
-    if (webkit && /\bcm-tab\b/.test(builder.content.lastChild.className))
-      builder.content.className = "cm-tab-wrap-hack";
+    if (webkit) {
+      var last = builder.content.lastChild
+      if (/\bcm-tab\b/.test(last.className) || (last.querySelector && last.querySelector(".cm-tab")))
+        builder.content.className = "cm-tab-wrap-hack";
+    }
 
     signal(cm, "renderLine", cm, lineView.line, builder.pre);
     if (builder.pre.className)
@@ -9025,13 +9038,16 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
         if (at <= sz) {
           child.insertInner(at, lines, height);
           if (child.lines && child.lines.length > 50) {
-            while (child.lines.length > 50) {
-              var spilled = child.lines.splice(child.lines.length - 25, 25);
-              var newleaf = new LeafChunk(spilled);
-              child.height -= newleaf.height;
-              this.children.splice(i + 1, 0, newleaf);
-              newleaf.parent = this;
+            // To avoid memory thrashing when child.lines is huge (e.g. first view of a large file), it's never spliced.
+            // Instead, small slices are taken. They're taken in order because sequential memory accesses are fastest.
+            var remaining = child.lines.length % 25 + 25
+            for (var pos = remaining; pos < child.lines.length;) {
+              var leaf = new LeafChunk(child.lines.slice(pos, pos += 25));
+              child.height -= leaf.height;
+              this.children.splice(++i, 0, leaf);
+              leaf.parent = this;
             }
+            child.lines = child.lines.slice(0, remaining);
             this.maybeSpill();
           }
           break;
@@ -9041,25 +9057,31 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     },
     // When a node has grown, check whether it should be split.
     maybeSpill: function() {
-      if (this.children.length <= 10) return;
       var me = this;
-      do {
-        var spilled = me.children.splice(me.children.length - 5, 5);
-        var sibling = new BranchChunk(spilled);
-        if (!me.parent) { // Become the parent node
-          var copy = new BranchChunk(me.children);
-          copy.parent = me;
-          me.children = [copy, sibling];
-          me = copy;
-        } else {
-          me.size -= sibling.size;
-          me.height -= sibling.height;
-          var myIndex = indexOf(me.parent.children, me);
-          me.parent.children.splice(myIndex + 1, 0, sibling);
-        }
-        sibling.parent = me.parent;
-      } while (me.children.length > 10);
-      me.parent.maybeSpill();
+      var children = me.children;
+      var numChildren = children.length;
+      if (numChildren <= 10) return;
+      // To avoid memory thrashing when the children array is huge (e.g. first view of a large file), it's never spliced.
+      // Instead, small slices are taken. They're taken in order because sequential memory accesses are fastest.
+      var parent = me.parent || me;
+      var numMoreBranches = Math.ceil((numChildren - 10) / 5);
+      var firstBranchNumChildren = numChildren - numMoreBranches * 5;
+      var firstBranch = new BranchChunk(children.slice(0, firstBranchNumChildren));
+      var branches = [firstBranch];
+      firstBranch.parent = parent;
+      for (var i = 0; i < numMoreBranches; i++) {
+        var branchStart = firstBranchNumChildren + i * 5;
+        var branch = new BranchChunk(children.slice(branchStart, branchStart + 5));
+        branches.push(branch);
+        branch.parent = parent;
+      }
+      if (parent === me) {
+        parent.children = branches;
+      } else {
+        var myIndex = indexOf(parent.children, me);
+        parent.children.splice(myIndex, 1, branches);
+      }
+      parent.maybeSpill();
     },
     iterN: function(at, n, op) {
       for (var i = 0; i < this.children.length; ++i) {
@@ -9336,9 +9358,9 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
         var spans = line.markedSpans;
         if (spans) for (var i = 0; i < spans.length; i++) {
           var span = spans[i];
-          if (!(span.to != null && lineNo == from.line && from.ch > span.to ||
+          if (!(span.to != null && lineNo == from.line && from.ch >= span.to ||
                 span.from == null && lineNo != from.line ||
-                span.from != null && lineNo == to.line && span.from > to.ch) &&
+                span.from != null && lineNo == to.line && span.from >= to.ch) &&
               (!filter || filter(span.marker)))
             found.push(span.marker.parent || span.marker);
         }
@@ -10601,7 +10623,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
 
   // THE END
 
-  CodeMirror.version = "5.13.3";
+  CodeMirror.version = "5.14.3";
 
   return CodeMirror;
 });
@@ -11362,21 +11384,19 @@ CodeMirror.defineMIME("text/x-brainfuck","brainfuck")
 })(function(CodeMirror) {
 "use strict";
 
-function Context(indented, column, type, align, prev) {
+function Context(indented, column, type, info, align, prev) {
   this.indented = indented;
   this.column = column;
   this.type = type;
+  this.info = info;
   this.align = align;
   this.prev = prev;
 }
-function isStatement(type) {
-  return type == "statement" || type == "switchstatement" || type == "namespace";
-}
-function pushContext(state, col, type) {
+function pushContext(state, col, type, info) {
   var indent = state.indented;
-  if (state.context && isStatement(state.context.type) && !isStatement(type))
+  if (state.context && state.context.type != "statement" && type != "statement")
     indent = state.context.indented;
-  return state.context = new Context(indent, col, type, null, state.context);
+  return state.context = new Context(indent, col, type, info, null, state.context);
 }
 function popContext(state) {
   var t = state.context.type;
@@ -11385,15 +11405,16 @@ function popContext(state) {
   return state.context = state.context.prev;
 }
 
-function typeBefore(stream, state) {
+function typeBefore(stream, state, pos) {
   if (state.prevToken == "variable" || state.prevToken == "variable-3") return true;
-  if (/\S(?:[^- ]>|[*\]])\s*$|\*$/.test(stream.string.slice(0, stream.start))) return true;
+  if (/\S(?:[^- ]>|[*\]])\s*$|\*$/.test(stream.string.slice(0, pos))) return true;
+  if (state.typeAtEndOfLine && stream.column() == stream.indentation()) return true;
 }
 
 function isTopScope(context) {
   for (;;) {
     if (!context || context.type == "top") return true;
-    if (context.type == "}" && context.prev.type != "namespace") return false;
+    if (context.type == "}" && context.prev.info != "namespace") return false;
     context = context.prev;
   }
 }
@@ -11498,13 +11519,18 @@ CodeMirror.defineMode("clike", function(config, parserConfig) {
     return "comment";
   }
 
+  function maybeEOL(stream, state) {
+    if (parserConfig.typeFirstDefinitions && stream.eol() && isTopScope(state.context))
+      state.typeAtEndOfLine = typeBefore(stream, state, stream.pos)
+  }
+
   // Interface
 
   return {
     startState: function(basecolumn) {
       return {
         tokenize: null,
-        context: new Context((basecolumn || 0) - indentUnit, 0, "top", false),
+        context: new Context((basecolumn || 0) - indentUnit, 0, "top", null, false),
         indented: 0,
         startOfLine: true,
         prevToken: null
@@ -11518,36 +11544,31 @@ CodeMirror.defineMode("clike", function(config, parserConfig) {
         state.indented = stream.indentation();
         state.startOfLine = true;
       }
-      if (stream.eatSpace()) return null;
+      if (stream.eatSpace()) { maybeEOL(stream, state); return null; }
       curPunc = isDefKeyword = null;
       var style = (state.tokenize || tokenBase)(stream, state);
       if (style == "comment" || style == "meta") return style;
       if (ctx.align == null) ctx.align = true;
 
-      if (endStatement.test(curPunc)) while (isStatement(state.context.type)) popContext(state);
+      if (endStatement.test(curPunc)) while (state.context.type == "statement") popContext(state);
       else if (curPunc == "{") pushContext(state, stream.column(), "}");
       else if (curPunc == "[") pushContext(state, stream.column(), "]");
       else if (curPunc == "(") pushContext(state, stream.column(), ")");
       else if (curPunc == "}") {
-        while (isStatement(ctx.type)) ctx = popContext(state);
+        while (ctx.type == "statement") ctx = popContext(state);
         if (ctx.type == "}") ctx = popContext(state);
-        while (isStatement(ctx.type)) ctx = popContext(state);
+        while (ctx.type == "statement") ctx = popContext(state);
       }
       else if (curPunc == ctx.type) popContext(state);
       else if (indentStatements &&
                (((ctx.type == "}" || ctx.type == "top") && curPunc != ";") ||
-                (isStatement(ctx.type) && curPunc == "newstatement"))) {
-        var type = "statement";
-        if (curPunc == "newstatement" && indentSwitch && stream.current() == "switch")
-          type = "switchstatement";
-        else if (style == "keyword" && stream.current() == "namespace")
-          type = "namespace";
-        pushContext(state, stream.column(), type);
+                (ctx.type == "statement" && curPunc == "newstatement"))) {
+        pushContext(state, stream.column(), "statement", stream.current());
       }
 
       if (style == "variable" &&
           ((state.prevToken == "def" ||
-            (parserConfig.typeFirstDefinitions && typeBefore(stream, state) &&
+            (parserConfig.typeFirstDefinitions && typeBefore(stream, state, stream.start) &&
              isTopScope(state.context) && stream.match(/^\s*\(/, false)))))
         style = "def";
 
@@ -11560,24 +11581,28 @@ CodeMirror.defineMode("clike", function(config, parserConfig) {
 
       state.startOfLine = false;
       state.prevToken = isDefKeyword ? "def" : style || curPunc;
+      maybeEOL(stream, state);
       return style;
     },
 
     indent: function(state, textAfter) {
-      if (state.tokenize != tokenBase && state.tokenize != null) return CodeMirror.Pass;
+      if (state.tokenize != tokenBase && state.tokenize != null || state.typeAtEndOfLine) return CodeMirror.Pass;
       var ctx = state.context, firstChar = textAfter && textAfter.charAt(0);
-      if (isStatement(ctx.type) && firstChar == "}") ctx = ctx.prev;
+      if (ctx.type == "statement" && firstChar == "}") ctx = ctx.prev;
+      if (parserConfig.dontIndentStatements)
+        while (ctx.type == "statement" && parserConfig.dontIndentStatements.test(ctx.info))
+          ctx = ctx.prev
       if (hooks.indent) {
         var hook = hooks.indent(state, ctx, textAfter);
         if (typeof hook == "number") return hook
       }
       var closing = firstChar == ctx.type;
-      var switchBlock = ctx.prev && ctx.prev.type == "switchstatement";
+      var switchBlock = ctx.prev && ctx.prev.info == "switch";
       if (parserConfig.allmanIndentation && /[{(]/.test(firstChar)) {
         while (ctx.type != "top" && ctx.type != "}") ctx = ctx.prev
         return ctx.indented
       }
-      if (isStatement(ctx.type))
+      if (ctx.type == "statement")
         return ctx.indented + (firstChar == "{" ? 0 : statementIndentUnit);
       if (ctx.align && (!dontAlignCalls || ctx.type != ")"))
         return ctx.column + (closing ? 0 : 1);
@@ -11737,6 +11762,7 @@ CodeMirror.defineMode("clike", function(config, parserConfig) {
     defKeywords: words("class namespace struct enum union"),
     typeFirstDefinitions: true,
     atoms: words("true false null"),
+    dontIndentStatements: /^template$/,
     hooks: {
       "#": cppHook,
       "*": pointerHook,
@@ -11882,7 +11908,7 @@ CodeMirror.defineMode("clike", function(config, parserConfig) {
       "=": function(stream, state) {
         var cx = state.context
         if (cx.type == "}" && cx.align && stream.eat(">")) {
-          state.context = new Context(cx.indented, cx.column, cx.type, null, cx.prev)
+          state.context = new Context(cx.indented, cx.column, cx.type, cx.info, null, cx.prev)
           return "operator"
         } else {
           return false
@@ -12165,14 +12191,70 @@ CodeMirror.defineMode("clojure", function (options) {
     var atoms = makeKeywords("true false nil");
 
     var keywords = makeKeywords(
-      "defn defn- def def- defonce defmulti defmethod defmacro defstruct deftype defprotocol defrecord defproject deftest slice defalias defhinted defmacro- defn-memo defnk defnk defonce- defunbound defunbound- defvar defvar- let letfn do case cond condp for loop recur when when-not when-let when-first if if-let if-not . .. -> ->> doto and or dosync doseq dotimes dorun doall load import unimport ns in-ns refer try catch finally throw with-open with-local-vars binding gen-class gen-and-load-class gen-and-save-class handler-case handle");
+      "defn defn- def def- defonce defmulti defmethod defmacro defstruct deftype defprotocol defrecord defproject deftest " +
+      "slice defalias defhinted defmacro- defn-memo defnk defnk defonce- defunbound defunbound- defvar defvar- let letfn " +
+      "do case cond condp for loop recur when when-not when-let when-first if if-let if-not . .. -> ->> doto and or dosync " +
+      "doseq dotimes dorun doall load import unimport ns in-ns refer try catch finally throw with-open with-local-vars " +
+      "binding gen-class gen-and-load-class gen-and-save-class handler-case handle");
 
     var builtins = makeKeywords(
-        "* *' *1 *2 *3 *agent* *allow-unresolved-vars* *assert* *clojure-version* *command-line-args* *compile-files* *compile-path* *compiler-options* *data-readers* *e *err* *file* *flush-on-newline* *fn-loader* *in* *math-context* *ns* *out* *print-dup* *print-length* *print-level* *print-meta* *print-readably* *read-eval* *source-path* *unchecked-math* *use-context-classloader* *verbose-defrecords* *warn-on-reflection* + +' - -' -> ->> ->ArrayChunk ->Vec ->VecNode ->VecSeq -cache-protocol-fn -reset-methods .. / < <= = == > >= EMPTY-NODE accessor aclone add-classpath add-watch agent agent-error agent-errors aget alength alias all-ns alter alter-meta! alter-var-root amap ancestors and apply areduce array-map aset aset-boolean aset-byte aset-char aset-double aset-float aset-int aset-long aset-short assert assoc assoc! assoc-in associative? atom await await-for await1 bases bean bigdec bigint biginteger binding bit-and bit-and-not bit-clear bit-flip bit-not bit-or bit-set bit-shift-left bit-shift-right bit-test bit-xor boolean boolean-array booleans bound-fn bound-fn* bound? butlast byte byte-array bytes case cast char char-array char-escape-string char-name-string char? chars chunk chunk-append chunk-buffer chunk-cons chunk-first chunk-next chunk-rest chunked-seq? class class? clear-agent-errors clojure-version coll? comment commute comp comparator compare compare-and-set! compile complement concat cond condp conj conj! cons constantly construct-proxy contains? count counted? create-ns create-struct cycle dec dec' decimal? declare default-data-readers definline definterface defmacro defmethod defmulti defn defn- defonce defprotocol defrecord defstruct deftype delay delay? deliver denominator deref derive descendants destructure disj disj! dissoc dissoc! distinct distinct? doall dorun doseq dosync dotimes doto double double-array doubles drop drop-last drop-while empty empty? ensure enumeration-seq error-handler error-mode eval even? every-pred every? ex-data ex-info extend extend-protocol extend-type extenders extends? false? ffirst file-seq filter filterv find find-keyword find-ns find-protocol-impl find-protocol-method find-var first flatten float float-array float? floats flush fn fn? fnext fnil for force format frequencies future future-call future-cancel future-cancelled? future-done? future? gen-class gen-interface gensym get get-in get-method get-proxy-class get-thread-bindings get-validator group-by hash hash-combine hash-map hash-set identical? identity if-let if-not ifn? import in-ns inc inc' init-proxy instance? int int-array integer? interleave intern interpose into into-array ints io! isa? iterate iterator-seq juxt keep keep-indexed key keys keyword keyword? last lazy-cat lazy-seq let letfn line-seq list list* list? load load-file load-reader load-string loaded-libs locking long long-array longs loop macroexpand macroexpand-1 make-array make-hierarchy map map-indexed map? mapcat mapv max max-key memfn memoize merge merge-with meta method-sig methods min min-key mod munge name namespace namespace-munge neg? newline next nfirst nil? nnext not not-any? not-empty not-every? not= ns ns-aliases ns-imports ns-interns ns-map ns-name ns-publics ns-refers ns-resolve ns-unalias ns-unmap nth nthnext nthrest num number? numerator object-array odd? or parents partial partition partition-all partition-by pcalls peek persistent! pmap pop pop! pop-thread-bindings pos? pr pr-str prefer-method prefers primitives-classnames print print-ctor print-dup print-method print-simple print-str printf println println-str prn prn-str promise proxy proxy-call-with-super proxy-mappings proxy-name proxy-super push-thread-bindings pvalues quot rand rand-int rand-nth range ratio? rational? rationalize re-find re-groups re-matcher re-matches re-pattern re-seq read read-line read-string realized? reduce reduce-kv reductions ref ref-history-count ref-max-history ref-min-history ref-set refer refer-clojure reify release-pending-sends rem remove remove-all-methods remove-method remove-ns remove-watch repeat repeatedly replace replicate require reset! reset-meta! resolve rest restart-agent resultset-seq reverse reversible? rseq rsubseq satisfies? second select-keys send send-off seq seq? seque sequence sequential? set set-error-handler! set-error-mode! set-validator! set? short short-array shorts shuffle shutdown-agents slurp some some-fn sort sort-by sorted-map sorted-map-by sorted-set sorted-set-by sorted? special-symbol? spit split-at split-with str string? struct struct-map subs subseq subvec supers swap! symbol symbol? sync take take-last take-nth take-while test the-ns thread-bound? time to-array to-array-2d trampoline transient tree-seq true? type unchecked-add unchecked-add-int unchecked-byte unchecked-char unchecked-dec unchecked-dec-int unchecked-divide-int unchecked-double unchecked-float unchecked-inc unchecked-inc-int unchecked-int unchecked-long unchecked-multiply unchecked-multiply-int unchecked-negate unchecked-negate-int unchecked-remainder-int unchecked-short unchecked-subtract unchecked-subtract-int underive unquote unquote-splicing update-in update-proxy use val vals var-get var-set var? vary-meta vec vector vector-of vector? when when-first when-let when-not while with-bindings with-bindings* with-in-str with-loading-context with-local-vars with-meta with-open with-out-str with-precision with-redefs with-redefs-fn xml-seq zero? zipmap *default-data-reader-fn* as-> cond-> cond->> reduced reduced? send-via set-agent-send-executor! set-agent-send-off-executor! some-> some->>");
+        "* *' *1 *2 *3 *agent* *allow-unresolved-vars* *assert* *clojure-version* *command-line-args* *compile-files* " +
+        "*compile-path* *compiler-options* *data-readers* *e *err* *file* *flush-on-newline* *fn-loader* *in* " +
+        "*math-context* *ns* *out* *print-dup* *print-length* *print-level* *print-meta* *print-readably* *read-eval* " +
+        "*source-path* *unchecked-math* *use-context-classloader* *verbose-defrecords* *warn-on-reflection* + +' - -' -> " +
+        "->> ->ArrayChunk ->Vec ->VecNode ->VecSeq -cache-protocol-fn -reset-methods .. / < <= = == > >= EMPTY-NODE accessor " +
+        "aclone add-classpath add-watch agent agent-error agent-errors aget alength alias all-ns alter alter-meta! " +
+        "alter-var-root amap ancestors and apply areduce array-map aset aset-boolean aset-byte aset-char aset-double " +
+        "aset-float aset-int aset-long aset-short assert assoc assoc! assoc-in associative? atom await await-for await1 " +
+        "bases bean bigdec bigint biginteger binding bit-and bit-and-not bit-clear bit-flip bit-not bit-or bit-set " +
+        "bit-shift-left bit-shift-right bit-test bit-xor boolean boolean-array booleans bound-fn bound-fn* bound? butlast " +
+        "byte byte-array bytes case cat cast char char-array char-escape-string char-name-string char? chars chunk chunk-append " +
+        "chunk-buffer chunk-cons chunk-first chunk-next chunk-rest chunked-seq? class class? clear-agent-errors " +
+        "clojure-version coll? comment commute comp comparator compare compare-and-set! compile complement completing concat cond condp " +
+        "conj conj! cons constantly construct-proxy contains? count counted? create-ns create-struct cycle dec dec' decimal? " +
+        "declare dedupe default-data-readers definline definterface defmacro defmethod defmulti defn defn- defonce defprotocol " +
+        "defrecord defstruct deftype delay delay? deliver denominator deref derive descendants destructure disj disj! dissoc " +
+        "dissoc! distinct distinct? doall dorun doseq dosync dotimes doto double double-array doubles drop drop-last " +
+        "drop-while eduction empty empty? ensure enumeration-seq error-handler error-mode eval even? every-pred every? ex-data ex-info " +
+        "extend extend-protocol extend-type extenders extends? false? ffirst file-seq filter filterv find find-keyword " +
+        "find-ns find-protocol-impl find-protocol-method find-var first flatten float float-array float? floats flush fn fn? " +
+        "fnext fnil for force format frequencies future future-call future-cancel future-cancelled? future-done? future? " +
+        "gen-class gen-interface gensym get get-in get-method get-proxy-class get-thread-bindings get-validator group-by hash " +
+        "hash-combine hash-map hash-set identical? identity if-let if-not ifn? import in-ns inc inc' init-proxy instance? " +
+        "int int-array integer? interleave intern interpose into into-array ints io! isa? iterate iterator-seq juxt keep " +
+        "keep-indexed key keys keyword keyword? last lazy-cat lazy-seq let letfn line-seq list list* list? load load-file " +
+        "load-reader load-string loaded-libs locking long long-array longs loop macroexpand macroexpand-1 make-array " +
+        "make-hierarchy map map-indexed map? mapcat mapv max max-key memfn memoize merge merge-with meta method-sig methods " +
+        "min min-key mod munge name namespace namespace-munge neg? newline next nfirst nil? nnext not not-any? not-empty " +
+        "not-every? not= ns ns-aliases ns-imports ns-interns ns-map ns-name ns-publics ns-refers ns-resolve ns-unalias " +
+        "ns-unmap nth nthnext nthrest num number? numerator object-array odd? or parents partial partition partition-all " +
+        "partition-by pcalls peek persistent! pmap pop pop! pop-thread-bindings pos? pr pr-str prefer-method prefers " +
+        "primitives-classnames print print-ctor print-dup print-method print-simple print-str printf println println-str " +
+        "prn prn-str promise proxy proxy-call-with-super proxy-mappings proxy-name proxy-super push-thread-bindings pvalues " +
+        "quot rand rand-int rand-nth random-sample range ratio? rational? rationalize re-find re-groups re-matcher re-matches re-pattern " +
+        "re-seq read read-line read-string realized? reduce reduce-kv reductions ref ref-history-count ref-max-history " +
+        "ref-min-history ref-set refer refer-clojure reify release-pending-sends rem remove remove-all-methods " +
+        "remove-method remove-ns remove-watch repeat repeatedly replace replicate require reset! reset-meta! resolve rest " +
+        "restart-agent resultset-seq reverse reversible? rseq rsubseq satisfies? second select-keys send send-off seq seq? " +
+        "seque sequence sequential? set set-error-handler! set-error-mode! set-validator! set? short short-array shorts " +
+        "shuffle shutdown-agents slurp some some-fn sort sort-by sorted-map sorted-map-by sorted-set sorted-set-by sorted? " +
+        "special-symbol? spit split-at split-with str string? struct struct-map subs subseq subvec supers swap! symbol " +
+        "symbol? sync take take-last take-nth take-while test the-ns thread-bound? time to-array to-array-2d trampoline transduce " +
+        "transient tree-seq true? type unchecked-add unchecked-add-int unchecked-byte unchecked-char unchecked-dec " +
+        "unchecked-dec-int unchecked-divide-int unchecked-double unchecked-float unchecked-inc unchecked-inc-int " +
+        "unchecked-int unchecked-long unchecked-multiply unchecked-multiply-int unchecked-negate unchecked-negate-int "+
+        "unchecked-remainder-int unchecked-short unchecked-subtract unchecked-subtract-int underive unquote " +
+        "unquote-splicing update update-in update-proxy use val vals var-get var-set var? vary-meta vec vector vector-of " +
+        "vector? volatile! volatile? vreset! vswap! when when-first when-let when-not while with-bindings with-bindings* with-in-str with-loading-context " +
+        "with-local-vars with-meta with-open with-out-str with-precision with-redefs with-redefs-fn xml-seq zero? zipmap " +
+        "*default-data-reader-fn* as-> cond-> cond->> reduced reduced? send-via set-agent-send-executor! " +
+        "set-agent-send-off-executor! some-> some->>");
 
     var indentKeys = makeKeywords(
         // Built-ins
-        "ns fn def defn defmethod bound-fn if if-not case condp when while when-not when-first do future comment doto locking proxy with-open with-precision reify deftype defrecord defprotocol extend extend-protocol extend-type try catch " +
+        "ns fn def defn defmethod bound-fn if if-not case condp when while when-not when-first do future comment doto " +
+        "locking proxy with-open with-precision reify deftype defrecord defprotocol extend extend-protocol extend-type " +
+        "try catch " +
 
         // Binding forms
         "let letfn binding loop for doseq dotimes when-let if-let " +
@@ -13708,9 +13790,9 @@ CodeMirror.defineMode("css", function(config, parserConfig) {
     "font-variant-alternates", "font-variant-caps", "font-variant-east-asian",
     "font-variant-ligatures", "font-variant-numeric", "font-variant-position",
     "font-weight", "grid", "grid-area", "grid-auto-columns", "grid-auto-flow",
-    "grid-auto-position", "grid-auto-rows", "grid-column", "grid-column-end",
-    "grid-column-start", "grid-row", "grid-row-end", "grid-row-start",
-    "grid-template", "grid-template-areas", "grid-template-columns",
+    "grid-auto-rows", "grid-column", "grid-column-end", "grid-column-gap",
+    "grid-column-start", "grid-gap", "grid-row", "grid-row-end", "grid-row-gap",
+    "grid-row-start", "grid-template", "grid-template-areas", "grid-template-columns",
     "grid-template-rows", "hanging-punctuation", "height", "hyphens",
     "icon", "image-orientation", "image-rendering", "image-resolution",
     "inline-box-align", "justify-content", "left", "letter-spacing",
@@ -13825,7 +13907,7 @@ CodeMirror.defineMode("css", function(config, parserConfig) {
     "compact", "condensed", "contain", "content",
     "content-box", "context-menu", "continuous", "copy", "counter", "counters", "cover", "crop",
     "cross", "crosshair", "currentcolor", "cursive", "cyclic", "darken", "dashed", "decimal",
-    "decimal-leading-zero", "default", "default-button", "destination-atop",
+    "decimal-leading-zero", "default", "default-button", "dense", "destination-atop",
     "destination-in", "destination-out", "destination-over", "devanagari", "difference",
     "disc", "discard", "disclosure-closed", "disclosure-open", "document",
     "dot-dash", "dot-dot-dash",
@@ -13839,13 +13921,13 @@ CodeMirror.defineMode("css", function(config, parserConfig) {
     "ethiopic-halehame-ti-er", "ethiopic-halehame-ti-et", "ethiopic-halehame-tig",
     "ethiopic-numeric", "ew-resize", "exclusion", "expanded", "extends", "extra-condensed",
     "extra-expanded", "fantasy", "fast", "fill", "fixed", "flat", "flex", "flex-end", "flex-start", "footnotes",
-    "forwards", "from", "geometricPrecision", "georgian", "graytext", "groove",
+    "forwards", "from", "geometricPrecision", "georgian", "graytext", "grid", "groove",
     "gujarati", "gurmukhi", "hand", "hangul", "hangul-consonant", "hard-light", "hebrew",
     "help", "hidden", "hide", "higher", "highlight", "highlighttext",
     "hiragana", "hiragana-iroha", "horizontal", "hsl", "hsla", "hue", "icon", "ignore",
     "inactiveborder", "inactivecaption", "inactivecaptiontext", "infinite",
     "infobackground", "infotext", "inherit", "initial", "inline", "inline-axis",
-    "inline-block", "inline-flex", "inline-table", "inset", "inside", "intrinsic", "invert",
+    "inline-block", "inline-flex", "inline-grid", "inline-table", "inset", "inside", "intrinsic", "invert",
     "italic", "japanese-formal", "japanese-informal", "justify", "kannada",
     "katakana", "katakana-iroha", "keep-all", "khmer",
     "korean-hangul-formal", "korean-hanja-formal", "korean-hanja-informal",
@@ -15650,7 +15732,7 @@ CodeMirror.defineMIME("text/x-dylan", "dylan");
 
         if (bracesMode !== null && (state.braced || peek === "{")) {
           if (state.localState === null)
-            state.localState = bracesMode.startState();
+            state.localState = CodeMirror.startState(bracesMode);
 
           var token = bracesMode.token(stream, state.localState),
           text = stream.current();
@@ -18583,8 +18665,8 @@ CodeMirror.defineMIME("text/x-groovy", "groovy");
     return {
       // default to html mode
       startState: function() {
-        var htmlState = htmlMode.startState();
-        var rubyState = rubyMode.startState();
+        var htmlState = CodeMirror.startState(htmlMode);
+        var rubyState = CodeMirror.startState(rubyMode);
         return {
           htmlState: htmlState,
           rubyState: rubyState,
@@ -19643,7 +19725,7 @@ CodeMirror.defineMIME("text/x-hxml", "hxml");
 
     return {
       startState: function () {
-        var state = htmlMode.startState();
+        var state = CodeMirror.startState(htmlMode);
         return {token: html, inTag: null, localMode: null, localState: null, htmlState: state};
       },
 
@@ -20125,7 +20207,7 @@ CodeMirror.defineMode('jade', function (config) {
     this.isInterpolating = false;
     this.interpolationNesting = 0;
 
-    this.jsState = jsMode.startState();
+    this.jsState = CodeMirror.startState(jsMode);
 
     this.restOfLine = '';
 
@@ -20475,7 +20557,7 @@ CodeMirror.defineMode('jade', function (config) {
       if (state.inAttributeName && stream.match(/^[^=,\)!]+/)) {
         if (stream.peek() === '=' || stream.peek() === '!') {
           state.inAttributeName = false;
-          state.jsState = jsMode.startState();
+          state.jsState = CodeMirror.startState(jsMode);
           if (state.lastTag === 'script' && stream.current().trim().toLowerCase() === 'type') {
             state.attributeIsType = true;
           } else {
@@ -20581,7 +20663,7 @@ CodeMirror.defineMode('jade', function (config) {
     if (stream.indentation() > state.indentOf || (state.innerModeForLine && !stream.sol()) || force) {
       if (state.innerMode) {
         if (!state.innerState) {
-          state.innerState = state.innerMode.startState ? state.innerMode.startState(stream.indentation()) : {};
+          state.innerState = state.innerMode.startState ? CodeMirror.startState(state.innerMode, stream.indentation()) : {};
         }
         return stream.hideFirstChars(state.indentOf + 2, function () {
           return state.innerMode.token(stream, state.innerState) || true;
@@ -20723,7 +20805,8 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
       "in": operator, "typeof": operator, "instanceof": operator,
       "true": atom, "false": atom, "null": atom, "undefined": atom, "NaN": atom, "Infinity": atom,
       "this": kw("this"), "class": kw("class"), "super": kw("atom"),
-      "yield": C, "export": kw("export"), "import": kw("import"), "extends": C
+      "yield": C, "export": kw("export"), "import": kw("import"), "extends": C,
+      "await": C, "async": kw("async")
     };
 
     // Extend the 'normal' keywords with the TypeScript language extensions
@@ -21047,6 +21130,7 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
     if (type == "export") return cont(pushlex("stat"), afterExport, poplex);
     if (type == "import") return cont(pushlex("stat"), afterImport, poplex);
     if (type == "module") return cont(pushlex("form"), pattern, pushlex("}"), expect("{"), block, poplex, poplex)
+    if (type == "async") return cont(statement)
     return pass(pushlex("stat"), expression, expect(";"), poplex);
   }
   function expression(type) {
@@ -22494,7 +22578,7 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
   ,   setextHeaderRE = /^ *(?:\={1,}|-{1,})\s*$/
   ,   textRE = /^[^#!\[\]*_\\<>` "'(~]+/
   ,   fencedCodeRE = new RegExp("^(" + (modeCfg.fencedCodeBlocks === true ? "~~~+|```+" : modeCfg.fencedCodeBlocks) +
-                                ")[ \\t]*([\\w+#]*)");
+                                ")[ \\t]*([\\w+#\-]*)");
 
   function switchInline(stream, state, f) {
     state.f = state.inline = f;
@@ -22624,7 +22708,7 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
       state.fencedChars = match[1]
       // try switching mode
       state.localMode = getMode(match[2]);
-      if (state.localMode) state.localState = state.localMode.startState();
+      if (state.localMode) state.localState = CodeMirror.startState(state.localMode);
       state.f = state.block = local;
       if (modeCfg.highlightFormatting) state.formatting = "code-block";
       state.code = -1
@@ -22843,13 +22927,13 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
       return tokenTypes.image;
     }
 
-    if (ch === '[' && stream.match(/.*\](\(.*\)| ?\[.*\])/, false)) {
+    if (ch === '[' && stream.match(/[^\]]*\](\(.*\)| ?\[.*?\])/, false)) {
       state.linkText = true;
       if (modeCfg.highlightFormatting) state.formatting = "link";
       return getType(state);
     }
 
-    if (ch === ']' && state.linkText && stream.match(/\(.*\)| ?\[.*\]/, false)) {
+    if (ch === ']' && state.linkText && stream.match(/\(.*?\)| ?\[.*?\]/, false)) {
       if (modeCfg.highlightFormatting) state.formatting = "link";
       var type = getType(state);
       state.linkText = false;
@@ -23002,12 +23086,17 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
     }
     var ch = stream.next();
     if (ch === '(' || ch === '[') {
-      state.f = state.inline = getLinkHrefInside(ch === "(" ? ")" : "]");
+      state.f = state.inline = getLinkHrefInside(ch === "(" ? ")" : "]", 0);
       if (modeCfg.highlightFormatting) state.formatting = "link-string";
       state.linkHref = true;
       return getType(state);
     }
     return 'error';
+  }
+
+  var linkRE = {
+    ")": /^(?:[^\\\(\)]|\\.|\((?:[^\\\(\)]|\\.)*\))*?(?=\))/,
+    "]": /^(?:[^\\\[\]]|\\.|\[(?:[^\\\[\\]]|\\.)*\])*?(?=\])/
   }
 
   function getLinkHrefInside(endChar) {
@@ -23022,10 +23111,7 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
         return returnState;
       }
 
-      if (stream.match(inlineRE(endChar), true)) {
-        stream.backUp(1);
-      }
-
+      stream.match(linkRE[endChar])
       state.linkHref = true;
       return getType(state);
     };
@@ -23071,18 +23157,6 @@ CodeMirror.defineMode("markdown", function(cmCfg, modeCfg) {
     }
     state.f = state.inline = inlineNormal;
     return tokenTypes.linkHref + " url";
-  }
-
-  var savedInlineRE = [];
-  function inlineRE(endChar) {
-    if (!savedInlineRE[endChar]) {
-      // Escape endChar for RegExp (taken from http://stackoverflow.com/a/494122/526741)
-      endChar = (endChar+'').replace(/([.?*+^$[\]\\(){}|-])/g, "\\$1");
-      // Match any non-endChar, escaped character, as well as the closing
-      // endChar.
-      savedInlineRE[endChar] = new RegExp('^(?:[^\\\\]|\\\\.)*?(' + endChar + ')');
-    }
-    return savedInlineRE[endChar];
   }
 
   var mode = {
@@ -23341,6 +23415,7 @@ CodeMirror.defineMode('mathematica', function(_config, _parserConfig) {
     }
 
     // everything else is an error
+    stream.next(); // advance the stream.
     return 'error';
   }
 
@@ -23479,11 +23554,12 @@ CodeMirror.defineMIME('text/x-mathematica', {
     {name: "Modelica", mime: "text/x-modelica", mode: "modelica", ext: ["mo"]},
     {name: "MUMPS", mime: "text/x-mumps", mode: "mumps", ext: ["mps"]},
     {name: "MS SQL", mime: "text/x-mssql", mode: "sql"},
+    {name: "mbox", mime: "application/mbox", mode: "mbox", ext: ["mbox"]},
     {name: "MySQL", mime: "text/x-mysql", mode: "sql"},
     {name: "Nginx", mime: "text/x-nginx-conf", mode: "nginx", file: /nginx.*\.conf$/i},
     {name: "NSIS", mime: "text/x-nsis", mode: "nsis", ext: ["nsh", "nsi"]},
     {name: "NTriples", mime: "text/n-triples", mode: "ntriples", ext: ["nt"]},
-    {name: "Objective C", mime: "text/x-objectivec", mode: "clike", ext: ["m", "mm"]},
+    {name: "Objective C", mime: "text/x-objectivec", mode: "clike", ext: ["m", "mm"], alias: ["objective-c", "objc"]},
     {name: "OCaml", mime: "text/x-ocaml", mode: "mllike", ext: ["ml", "mli", "mll", "mly"]},
     {name: "Octave", mime: "text/x-octave", mode: "octave", ext: ["m"]},
     {name: "Oz", mime: "text/x-oz", mode: "oz", ext: ["oz"]},
@@ -23497,7 +23573,7 @@ CodeMirror.defineMIME('text/x-mathematica', {
     {name: "PowerShell", mime: "application/x-powershell", mode: "powershell", ext: ["ps1", "psd1", "psm1"]},
     {name: "Properties files", mime: "text/x-properties", mode: "properties", ext: ["properties", "ini", "in"], alias: ["ini", "properties"]},
     {name: "ProtoBuf", mime: "text/x-protobuf", mode: "protobuf", ext: ["proto"]},
-    {name: "Python", mime: "text/x-python", mode: "python", ext: ["py", "pyw"]},
+    {name: "Python", mime: "text/x-python", mode: "python", ext: ["BUILD", "bzl", "py", "pyw"], file: /^(BUCK|BUILD)$/},
     {name: "Puppet", mime: "text/x-puppet", mode: "puppet", ext: ["pp"]},
     {name: "Q", mime: "text/x-q", mode: "q", ext: ["q"]},
     {name: "R", mime: "text/x-rsrc", mode: "r", ext: ["r"], alias: ["rscript"]},
@@ -23506,6 +23582,7 @@ CodeMirror.defineMIME('text/x-mathematica', {
     {name: "RPM Spec", mime: "text/x-rpm-spec", mode: "rpm", ext: ["spec"]},
     {name: "Ruby", mime: "text/x-ruby", mode: "ruby", ext: ["rb"], alias: ["jruby", "macruby", "rake", "rb", "rbx"]},
     {name: "Rust", mime: "text/x-rustsrc", mode: "rust", ext: ["rs"]},
+    {name: "SAS", mime: "text/x-sas", mode: "sas", ext: ["sas"]},
     {name: "Sass", mime: "text/x-sass", mode: "sass", ext: ["sass"]},
     {name: "Scala", mime: "text/x-scala", mode: "clike", ext: ["scala"]},
     {name: "Scheme", mime: "text/x-scheme", mode: "scheme", ext: ["scm", "ss"]},
@@ -23537,6 +23614,7 @@ CodeMirror.defineMIME('text/x-mathematica', {
     {name: "Turtle", mime: "text/turtle", mode: "turtle", ext: ["ttl"]},
     {name: "TypeScript", mime: "application/typescript", mode: "javascript", ext: ["ts"], alias: ["ts"]},
     {name: "Twig", mime: "text/x-twig", mode: "twig"},
+    {name: "Web IDL", mime: "text/x-webidl", mode: "webidl", ext: ["webidl"]},
     {name: "VB.NET", mime: "text/x-vb", mode: "vb", ext: ["vb"]},
     {name: "VBScript", mime: "text/vbscript", mode: "vbscript", ext: ["vbs"]},
     {name: "Velocity", mime: "text/velocity", mode: "velocity", ext: ["vtl"]},
@@ -23544,6 +23622,7 @@ CodeMirror.defineMIME('text/x-mathematica', {
     {name: "VHDL", mime: "text/x-vhdl", mode: "vhdl", ext: ["vhd", "vhdl"]},
     {name: "XML", mimes: ["application/xml", "text/xml"], mode: "xml", ext: ["xml", "xsl", "xsd"], alias: ["rss", "wsdl", "xsd"]},
     {name: "XQuery", mime: "application/xquery", mode: "xquery", ext: ["xy", "xquery"]},
+    {name: "Yacas", mime: "text/x-yacas", mode: "yacas", ext: ["ys"]},
     {name: "YAML", mime: "text/x-yaml", mode: "yaml", ext: ["yaml", "yml"], alias: ["yml"]},
     {name: "Z80", mime: "text/x-z80", mode: "z80", ext: ["z80"]},
     {name: "mscgen", mime: "text/x-mscgen", mode: "mscgen", ext: ["mscgen", "mscin", "msc"]},
@@ -25616,7 +25695,7 @@ CodeMirror.defineMode("pegjs", function (config) {
         return "comment";
       } else if (state.braced || stream.peek() === '{') {
         if (state.localState === null) {
-          state.localState = jsMode.startState();
+          state.localState = CodeMirror.startState(jsMode);
         }
         var token = jsMode.token(stream, state.localState);
         var text = stream.current();
@@ -26576,7 +26655,7 @@ function eatSuffix(stream, c){
     "die echo empty exit eval include include_once isset list require require_once return " +
     "print unset __halt_compiler self static parent yield insteadof finally";
   var phpAtoms = "true false null TRUE FALSE NULL __CLASS__ __DIR__ __FILE__ __LINE__ __METHOD__ __FUNCTION__ __NAMESPACE__ __TRAIT__";
-  var phpBuiltin = "func_num_args func_get_arg func_get_args strlen strcmp strncmp strcasecmp strncasecmp each error_reporting define defined trigger_error user_error set_error_handler restore_error_handler get_declared_classes get_loaded_extensions extension_loaded get_extension_funcs debug_backtrace constant bin2hex hex2bin sleep usleep time mktime gmmktime strftime gmstrftime strtotime date gmdate getdate localtime checkdate flush wordwrap htmlspecialchars htmlentities html_entity_decode md5 md5_file crc32 getimagesize image_type_to_mime_type phpinfo phpversion phpcredits strnatcmp strnatcasecmp substr_count strspn strcspn strtok strtoupper strtolower strpos strrpos strrev hebrev hebrevc nl2br basename dirname pathinfo stripslashes stripcslashes strstr stristr strrchr str_shuffle str_word_count strcoll substr substr_replace quotemeta ucfirst ucwords strtr addslashes addcslashes rtrim str_replace str_repeat count_chars chunk_split trim ltrim strip_tags similar_text explode implode setlocale localeconv parse_str str_pad chop strchr sprintf printf vprintf vsprintf sscanf fscanf parse_url urlencode urldecode rawurlencode rawurldecode readlink linkinfo link unlink exec system escapeshellcmd escapeshellarg passthru shell_exec proc_open proc_close rand srand getrandmax mt_rand mt_srand mt_getrandmax base64_decode base64_encode abs ceil floor round is_finite is_nan is_infinite bindec hexdec octdec decbin decoct dechex base_convert number_format fmod ip2long long2ip getenv putenv getopt microtime gettimeofday getrusage uniqid quoted_printable_decode set_time_limit get_cfg_var magic_quotes_runtime set_magic_quotes_runtime get_magic_quotes_gpc get_magic_quotes_runtime import_request_variables error_log serialize unserialize memory_get_usage var_dump var_export debug_zval_dump print_r highlight_file show_source highlight_string ini_get ini_get_all ini_set ini_alter ini_restore get_include_path set_include_path restore_include_path setcookie header headers_sent connection_aborted connection_status ignore_user_abort parse_ini_file is_uploaded_file move_uploaded_file intval floatval doubleval strval gettype settype is_null is_resource is_bool is_long is_float is_int is_integer is_double is_real is_numeric is_string is_array is_object is_scalar ereg ereg_replace eregi eregi_replace split spliti join sql_regcase dl pclose popen readfile rewind rmdir umask fclose feof fgetc fgets fgetss fread fopen fpassthru ftruncate fstat fseek ftell fflush fwrite fputs mkdir rename copy tempnam tmpfile file file_get_contents file_put_contents stream_select stream_context_create stream_context_set_params stream_context_set_option stream_context_get_options stream_filter_prepend stream_filter_append fgetcsv flock get_meta_tags stream_set_write_buffer set_file_buffer set_socket_blocking stream_set_blocking socket_set_blocking stream_get_meta_data stream_register_wrapper stream_wrapper_register stream_set_timeout socket_set_timeout socket_get_status realpath fnmatch fsockopen pfsockopen pack unpack get_browser crypt opendir closedir chdir getcwd rewinddir readdir dir glob fileatime filectime filegroup fileinode filemtime fileowner fileperms filesize filetype file_exists is_writable is_writeable is_readable is_executable is_file is_dir is_link stat lstat chown touch clearstatcache mail ob_start ob_flush ob_clean ob_end_flush ob_end_clean ob_get_flush ob_get_clean ob_get_length ob_get_level ob_get_status ob_get_contents ob_implicit_flush ob_list_handlers ksort krsort natsort natcasesort asort arsort sort rsort usort uasort uksort shuffle array_walk count end prev next reset current key min max in_array array_search extract compact array_fill range array_multisort array_push array_pop array_shift array_unshift array_splice array_slice array_merge array_merge_recursive array_keys array_values array_count_values array_reverse array_reduce array_pad array_flip array_change_key_case array_rand array_unique array_intersect array_intersect_assoc array_diff array_diff_assoc array_sum array_filter array_map array_chunk array_key_exists pos sizeof key_exists assert assert_options version_compare ftok str_rot13 aggregate session_name session_module_name session_save_path session_id session_regenerate_id session_decode session_register session_unregister session_is_registered session_encode session_start session_destroy session_unset session_set_save_handler session_cache_limiter session_cache_expire session_set_cookie_params session_get_cookie_params session_write_close preg_match preg_match_all preg_replace preg_replace_callback preg_split preg_quote preg_grep overload ctype_alnum ctype_alpha ctype_cntrl ctype_digit ctype_lower ctype_graph ctype_print ctype_punct ctype_space ctype_upper ctype_xdigit virtual apache_request_headers apache_note apache_lookup_uri apache_child_terminate apache_setenv apache_response_headers apache_get_version getallheaders mysql_connect mysql_pconnect mysql_close mysql_select_db mysql_create_db mysql_drop_db mysql_query mysql_unbuffered_query mysql_db_query mysql_list_dbs mysql_list_tables mysql_list_fields mysql_list_processes mysql_error mysql_errno mysql_affected_rows mysql_insert_id mysql_result mysql_num_rows mysql_num_fields mysql_fetch_row mysql_fetch_array mysql_fetch_assoc mysql_fetch_object mysql_data_seek mysql_fetch_lengths mysql_fetch_field mysql_field_seek mysql_free_result mysql_field_name mysql_field_table mysql_field_len mysql_field_type mysql_field_flags mysql_escape_string mysql_real_escape_string mysql_stat mysql_thread_id mysql_client_encoding mysql_get_client_info mysql_get_host_info mysql_get_proto_info mysql_get_server_info mysql_info mysql mysql_fieldname mysql_fieldtable mysql_fieldlen mysql_fieldtype mysql_fieldflags mysql_selectdb mysql_createdb mysql_dropdb mysql_freeresult mysql_numfields mysql_numrows mysql_listdbs mysql_listtables mysql_listfields mysql_db_name mysql_dbname mysql_tablename mysql_table_name pg_connect pg_pconnect pg_close pg_connection_status pg_connection_busy pg_connection_reset pg_host pg_dbname pg_port pg_tty pg_options pg_ping pg_query pg_send_query pg_cancel_query pg_fetch_result pg_fetch_row pg_fetch_assoc pg_fetch_array pg_fetch_object pg_fetch_all pg_affected_rows pg_get_result pg_result_seek pg_result_status pg_free_result pg_last_oid pg_num_rows pg_num_fields pg_field_name pg_field_num pg_field_size pg_field_type pg_field_prtlen pg_field_is_null pg_get_notify pg_get_pid pg_result_error pg_last_error pg_last_notice pg_put_line pg_end_copy pg_copy_to pg_copy_from pg_trace pg_untrace pg_lo_create pg_lo_unlink pg_lo_open pg_lo_close pg_lo_read pg_lo_write pg_lo_read_all pg_lo_import pg_lo_export pg_lo_seek pg_lo_tell pg_escape_string pg_escape_bytea pg_unescape_bytea pg_client_encoding pg_set_client_encoding pg_meta_data pg_convert pg_insert pg_update pg_delete pg_select pg_exec pg_getlastoid pg_cmdtuples pg_errormessage pg_numrows pg_numfields pg_fieldname pg_fieldsize pg_fieldtype pg_fieldnum pg_fieldprtlen pg_fieldisnull pg_freeresult pg_result pg_loreadall pg_locreate pg_lounlink pg_loopen pg_loclose pg_loread pg_lowrite pg_loimport pg_loexport http_response_code get_declared_traits getimagesizefromstring socket_import_stream stream_set_chunk_size trait_exists header_register_callback class_uses session_status session_register_shutdown echo print global static exit array empty eval isset unset die include require include_once require_once json_decode json_encode json_last_error json_last_error_msg curl_close curl_copy_handle curl_errno curl_error curl_escape curl_exec curl_file_create curl_getinfo curl_init curl_multi_add_handle curl_multi_close curl_multi_exec curl_multi_getcontent curl_multi_info_read curl_multi_init curl_multi_remove_handle curl_multi_select curl_multi_setopt curl_multi_strerror curl_pause curl_reset curl_setopt_array curl_setopt curl_share_close curl_share_init curl_share_setopt curl_strerror curl_unescape curl_version mysqli_affected_rows mysqli_autocommit mysqli_change_user mysqli_character_set_name mysqli_close mysqli_commit mysqli_connect_errno mysqli_connect_error mysqli_connect mysqli_data_seek mysqli_debug mysqli_dump_debug_info mysqli_errno mysqli_error_list mysqli_error mysqli_fetch_all mysqli_fetch_array mysqli_fetch_assoc mysqli_fetch_field_direct mysqli_fetch_field mysqli_fetch_fields mysqli_fetch_lengths mysqli_fetch_object mysqli_fetch_row mysqli_field_count mysqli_field_seek mysqli_field_tell mysqli_free_result mysqli_get_charset mysqli_get_client_info mysqli_get_client_stats mysqli_get_client_version mysqli_get_connection_stats mysqli_get_host_info mysqli_get_proto_info mysqli_get_server_info mysqli_get_server_version mysqli_info mysqli_init mysqli_insert_id mysqli_kill mysqli_more_results mysqli_multi_query mysqli_next_result mysqli_num_fields mysqli_num_rows mysqli_options mysqli_ping mysqli_prepare mysqli_query mysqli_real_connect mysqli_real_escape_string mysqli_real_query mysqli_reap_async_query mysqli_refresh mysqli_rollback mysqli_select_db mysqli_set_charset mysqli_set_local_infile_default mysqli_set_local_infile_handler mysqli_sqlstate mysqli_ssl_set mysqli_stat mysqli_stmt_init mysqli_store_result mysqli_thread_id mysqli_thread_safe mysqli_use_result mysqli_warning_count";
+  var phpBuiltin = "func_num_args func_get_arg func_get_args strlen strcmp strncmp strcasecmp strncasecmp each error_reporting define defined trigger_error user_error set_error_handler restore_error_handler get_declared_classes get_loaded_extensions extension_loaded get_extension_funcs debug_backtrace constant bin2hex hex2bin sleep usleep time mktime gmmktime strftime gmstrftime strtotime date gmdate getdate localtime checkdate flush wordwrap htmlspecialchars htmlentities html_entity_decode md5 md5_file crc32 getimagesize image_type_to_mime_type phpinfo phpversion phpcredits strnatcmp strnatcasecmp substr_count strspn strcspn strtok strtoupper strtolower strpos strrpos strrev hebrev hebrevc nl2br basename dirname pathinfo stripslashes stripcslashes strstr stristr strrchr str_shuffle str_word_count strcoll substr substr_replace quotemeta ucfirst ucwords strtr addslashes addcslashes rtrim str_replace str_repeat count_chars chunk_split trim ltrim strip_tags similar_text explode implode setlocale localeconv parse_str str_pad chop strchr sprintf printf vprintf vsprintf sscanf fscanf parse_url urlencode urldecode rawurlencode rawurldecode readlink linkinfo link unlink exec system escapeshellcmd escapeshellarg passthru shell_exec proc_open proc_close rand srand getrandmax mt_rand mt_srand mt_getrandmax base64_decode base64_encode abs ceil floor round is_finite is_nan is_infinite bindec hexdec octdec decbin decoct dechex base_convert number_format fmod ip2long long2ip getenv putenv getopt microtime gettimeofday getrusage uniqid quoted_printable_decode set_time_limit get_cfg_var magic_quotes_runtime set_magic_quotes_runtime get_magic_quotes_gpc get_magic_quotes_runtime import_request_variables error_log serialize unserialize memory_get_usage var_dump var_export debug_zval_dump print_r highlight_file show_source highlight_string ini_get ini_get_all ini_set ini_alter ini_restore get_include_path set_include_path restore_include_path setcookie header headers_sent connection_aborted connection_status ignore_user_abort parse_ini_file is_uploaded_file move_uploaded_file intval floatval doubleval strval gettype settype is_null is_resource is_bool is_long is_float is_int is_integer is_double is_real is_numeric is_string is_array is_object is_scalar ereg ereg_replace eregi eregi_replace split spliti join sql_regcase dl pclose popen readfile rewind rmdir umask fclose feof fgetc fgets fgetss fread fopen fpassthru ftruncate fstat fseek ftell fflush fwrite fputs mkdir rename copy tempnam tmpfile file file_get_contents file_put_contents stream_select stream_context_create stream_context_set_params stream_context_set_option stream_context_get_options stream_filter_prepend stream_filter_append fgetcsv flock get_meta_tags stream_set_write_buffer set_file_buffer set_socket_blocking stream_set_blocking socket_set_blocking stream_get_meta_data stream_register_wrapper stream_wrapper_register stream_set_timeout socket_set_timeout socket_get_status realpath fnmatch fsockopen pfsockopen pack unpack get_browser crypt opendir closedir chdir getcwd rewinddir readdir dir glob fileatime filectime filegroup fileinode filemtime fileowner fileperms filesize filetype file_exists is_writable is_writeable is_readable is_executable is_file is_dir is_link stat lstat chown touch clearstatcache mail ob_start ob_flush ob_clean ob_end_flush ob_end_clean ob_get_flush ob_get_clean ob_get_length ob_get_level ob_get_status ob_get_contents ob_implicit_flush ob_list_handlers ksort krsort natsort natcasesort asort arsort sort rsort usort uasort uksort shuffle array_walk count end prev next reset current key min max in_array array_search extract compact array_fill range array_multisort array_push array_pop array_shift array_unshift array_splice array_slice array_merge array_merge_recursive array_keys array_values array_count_values array_reverse array_reduce array_pad array_flip array_change_key_case array_rand array_unique array_intersect array_intersect_assoc array_diff array_diff_assoc array_sum array_filter array_map array_chunk array_key_exists array_intersect_key array_combine array_column pos sizeof key_exists assert assert_options version_compare ftok str_rot13 aggregate session_name session_module_name session_save_path session_id session_regenerate_id session_decode session_register session_unregister session_is_registered session_encode session_start session_destroy session_unset session_set_save_handler session_cache_limiter session_cache_expire session_set_cookie_params session_get_cookie_params session_write_close preg_match preg_match_all preg_replace preg_replace_callback preg_split preg_quote preg_grep overload ctype_alnum ctype_alpha ctype_cntrl ctype_digit ctype_lower ctype_graph ctype_print ctype_punct ctype_space ctype_upper ctype_xdigit virtual apache_request_headers apache_note apache_lookup_uri apache_child_terminate apache_setenv apache_response_headers apache_get_version getallheaders mysql_connect mysql_pconnect mysql_close mysql_select_db mysql_create_db mysql_drop_db mysql_query mysql_unbuffered_query mysql_db_query mysql_list_dbs mysql_list_tables mysql_list_fields mysql_list_processes mysql_error mysql_errno mysql_affected_rows mysql_insert_id mysql_result mysql_num_rows mysql_num_fields mysql_fetch_row mysql_fetch_array mysql_fetch_assoc mysql_fetch_object mysql_data_seek mysql_fetch_lengths mysql_fetch_field mysql_field_seek mysql_free_result mysql_field_name mysql_field_table mysql_field_len mysql_field_type mysql_field_flags mysql_escape_string mysql_real_escape_string mysql_stat mysql_thread_id mysql_client_encoding mysql_get_client_info mysql_get_host_info mysql_get_proto_info mysql_get_server_info mysql_info mysql mysql_fieldname mysql_fieldtable mysql_fieldlen mysql_fieldtype mysql_fieldflags mysql_selectdb mysql_createdb mysql_dropdb mysql_freeresult mysql_numfields mysql_numrows mysql_listdbs mysql_listtables mysql_listfields mysql_db_name mysql_dbname mysql_tablename mysql_table_name pg_connect pg_pconnect pg_close pg_connection_status pg_connection_busy pg_connection_reset pg_host pg_dbname pg_port pg_tty pg_options pg_ping pg_query pg_send_query pg_cancel_query pg_fetch_result pg_fetch_row pg_fetch_assoc pg_fetch_array pg_fetch_object pg_fetch_all pg_affected_rows pg_get_result pg_result_seek pg_result_status pg_free_result pg_last_oid pg_num_rows pg_num_fields pg_field_name pg_field_num pg_field_size pg_field_type pg_field_prtlen pg_field_is_null pg_get_notify pg_get_pid pg_result_error pg_last_error pg_last_notice pg_put_line pg_end_copy pg_copy_to pg_copy_from pg_trace pg_untrace pg_lo_create pg_lo_unlink pg_lo_open pg_lo_close pg_lo_read pg_lo_write pg_lo_read_all pg_lo_import pg_lo_export pg_lo_seek pg_lo_tell pg_escape_string pg_escape_bytea pg_unescape_bytea pg_client_encoding pg_set_client_encoding pg_meta_data pg_convert pg_insert pg_update pg_delete pg_select pg_exec pg_getlastoid pg_cmdtuples pg_errormessage pg_numrows pg_numfields pg_fieldname pg_fieldsize pg_fieldtype pg_fieldnum pg_fieldprtlen pg_fieldisnull pg_freeresult pg_result pg_loreadall pg_locreate pg_lounlink pg_loopen pg_loclose pg_loread pg_lowrite pg_loimport pg_loexport http_response_code get_declared_traits getimagesizefromstring socket_import_stream stream_set_chunk_size trait_exists header_register_callback class_uses session_status session_register_shutdown echo print global static exit array empty eval isset unset die include require include_once require_once json_decode json_encode json_last_error json_last_error_msg curl_close curl_copy_handle curl_errno curl_error curl_escape curl_exec curl_file_create curl_getinfo curl_init curl_multi_add_handle curl_multi_close curl_multi_exec curl_multi_getcontent curl_multi_info_read curl_multi_init curl_multi_remove_handle curl_multi_select curl_multi_setopt curl_multi_strerror curl_pause curl_reset curl_setopt_array curl_setopt curl_share_close curl_share_init curl_share_setopt curl_strerror curl_unescape curl_version mysqli_affected_rows mysqli_autocommit mysqli_change_user mysqli_character_set_name mysqli_close mysqli_commit mysqli_connect_errno mysqli_connect_error mysqli_connect mysqli_data_seek mysqli_debug mysqli_dump_debug_info mysqli_errno mysqli_error_list mysqli_error mysqli_fetch_all mysqli_fetch_array mysqli_fetch_assoc mysqli_fetch_field_direct mysqli_fetch_field mysqli_fetch_fields mysqli_fetch_lengths mysqli_fetch_object mysqli_fetch_row mysqli_field_count mysqli_field_seek mysqli_field_tell mysqli_free_result mysqli_get_charset mysqli_get_client_info mysqli_get_client_stats mysqli_get_client_version mysqli_get_connection_stats mysqli_get_host_info mysqli_get_proto_info mysqli_get_server_info mysqli_get_server_version mysqli_info mysqli_init mysqli_insert_id mysqli_kill mysqli_more_results mysqli_multi_query mysqli_next_result mysqli_num_fields mysqli_num_rows mysqli_options mysqli_ping mysqli_prepare mysqli_query mysqli_real_connect mysqli_real_escape_string mysqli_real_query mysqli_reap_async_query mysqli_refresh mysqli_rollback mysqli_select_db mysqli_set_charset mysqli_set_local_infile_default mysqli_set_local_infile_handler mysqli_sqlstate mysqli_ssl_set mysqli_stat mysqli_stmt_init mysqli_store_result mysqli_thread_id mysqli_thread_safe mysqli_use_result mysqli_warning_count";
   CodeMirror.registerHelper("hintWords", "php", [phpKeywords, phpAtoms, phpBuiltin].join(" ").split(" "));
   CodeMirror.registerHelper("wordChars", "php", /[\w$]/);
 
@@ -27240,13 +27319,6 @@ CodeMirror.defineMIME("text/x-puppet", "puppet");
                         "sorted", "staticmethod", "str", "sum", "super", "tuple",
                         "type", "vars", "zip", "__import__", "NotImplemented",
                         "Ellipsis", "__debug__"];
-  var py2 = {builtins: ["apply", "basestring", "buffer", "cmp", "coerce", "execfile",
-                        "file", "intern", "long", "raw_input", "reduce", "reload",
-                        "unichr", "unicode", "xrange", "False", "True", "None"],
-             keywords: ["exec", "print"]};
-  var py3 = {builtins: ["ascii", "bytes", "exec", "print"],
-             keywords: ["nonlocal", "False", "True", "None", "async", "await"]};
-
   CodeMirror.registerHelper("hintWords", "python", commonKeywords.concat(commonBuiltins));
 
   function top(state) {
@@ -27261,15 +27333,6 @@ CodeMirror.defineMIME("text/x-puppet", "puppet");
     var doubleDelimiters = parserConf.doubleDelimiters || /^(\+=|\-=|\*=|%=|\/=|&=|\|=|\^=)/;
     var tripleDelimiters = parserConf.tripleDelimiters || /^(\/\/=|>>=|<<=|\*\*=)/;
 
-    if (parserConf.version && parseInt(parserConf.version, 10) == 3) {
-        // since http://legacy.python.org/dev/peps/pep-0465/ @ is also an operator
-        var singleOperators = parserConf.singleOperators || /^[\+\-\*\/%&|\^~<>!@]/;
-        var identifiers = parserConf.identifiers|| /^[_A-Za-z\u00A1-\uFFFF][_A-Za-z0-9\u00A1-\uFFFF]*/;
-    } else {
-        var singleOperators = parserConf.singleOperators || /^[\+\-\*\/%&|\^~<>!]/;
-        var identifiers = parserConf.identifiers|| /^[_A-Za-z][_A-Za-z0-9]*/;
-    }
-
     var hangingIndent = parserConf.hangingIndent || conf.indentUnit;
 
     var myKeywords = commonKeywords, myBuiltins = commonBuiltins;
@@ -27279,13 +27342,21 @@ CodeMirror.defineMIME("text/x-puppet", "puppet");
     if (parserConf.extra_builtins != undefined)
       myBuiltins = myBuiltins.concat(parserConf.extra_builtins);
 
-    if (parserConf.version && parseInt(parserConf.version, 10) == 3) {
-      myKeywords = myKeywords.concat(py3.keywords);
-      myBuiltins = myBuiltins.concat(py3.builtins);
-      var stringPrefixes = new RegExp("^(([rb]|(br))?('{3}|\"{3}|['\"]))", "i");
+    var py3 = parserConf.version && parseInt(parserConf.version, 10) == 3
+    if (py3) {
+      // since http://legacy.python.org/dev/peps/pep-0465/ @ is also an operator
+      var singleOperators = parserConf.singleOperators || /^[\+\-\*\/%&|\^~<>!@]/;
+      var identifiers = parserConf.identifiers|| /^[_A-Za-z\u00A1-\uFFFF][_A-Za-z0-9\u00A1-\uFFFF]*/;
+      myKeywords = myKeywords.concat(["nonlocal", "False", "True", "None", "async", "await"]);
+      myBuiltins = myBuiltins.concat(["ascii", "bytes", "exec", "print"]);
+      var stringPrefixes = new RegExp("^(([rbuf]|(br))?('{3}|\"{3}|['\"]))", "i");
     } else {
-      myKeywords = myKeywords.concat(py2.keywords);
-      myBuiltins = myBuiltins.concat(py2.builtins);
+      var singleOperators = parserConf.singleOperators || /^[\+\-\*\/%&|\^~<>!]/;
+      var identifiers = parserConf.identifiers|| /^[_A-Za-z][_A-Za-z0-9]*/;
+      myKeywords = myKeywords.concat(["exec", "print"]);
+      myBuiltins = myBuiltins.concat(["apply", "basestring", "buffer", "cmp", "coerce", "execfile",
+                                      "file", "intern", "long", "raw_input", "reduce", "reload",
+                                      "unichr", "unicode", "xrange", "False", "True", "None"]);
       var stringPrefixes = new RegExp("^(([rub]|(ur)|(br))?('{3}|\"{3}|['\"]))", "i");
     }
     var keywords = wordRegexp(myKeywords);
@@ -27457,16 +27528,16 @@ CodeMirror.defineMIME("text/x-puppet", "puppet");
     }
 
     function tokenLexer(stream, state) {
+      if (stream.sol()) state.beginningOfLine = true;
+
       var style = state.tokenize(stream, state);
       var current = stream.current();
 
       // Handle decorators
-      if (current == "@") {
-        if (parserConf.version && parseInt(parserConf.version, 10) == 3)
-          return stream.match(identifiers, false) ? "meta" : "operator";
-        else
-          return stream.match(identifiers, false) ? "meta" : ERRORCLASS;
-      }
+      if (state.beginningOfLine && current == "@")
+        return stream.match(identifiers, false) ? "meta" : py3 ? "operator" : ERRORCLASS;
+
+      if (/\S/.test(current)) state.beginningOfLine = false;
 
       if ((style == "variable" || style == "builtin")
           && state.lastToken == "meta")
@@ -30063,7 +30134,7 @@ CodeMirror.defineMIME("application/sieve", "sieve");
       };
       return function(stream, state) {
         rubyState = state.rubyState;
-        state.rubyState = rubyMode.startState();
+        state.rubyState = CodeMirror.startState(rubyMode);
         state.tokenize = runSplat;
         return ruby(stream, state);
       };
@@ -30215,7 +30286,7 @@ CodeMirror.defineMIME("application/sieve", "sieve");
 
     function startSubMode(mode, state) {
       var subMode = getMode(mode);
-      var subState = subMode.startState && subMode.startState();
+      var subState = CodeMirror.startState(subMode);
 
       state.subMode = subMode;
       state.subState = subState;
@@ -30405,8 +30476,8 @@ CodeMirror.defineMIME("application/sieve", "sieve");
     var mode = {
       // default to html mode
       startState: function() {
-        var htmlState = htmlMode.startState();
-        var rubyState = rubyMode.startState();
+        var htmlState = CodeMirror.startState(htmlMode);
+        var rubyState = CodeMirror.startState(rubyMode);
         return {
           htmlState: htmlState,
           rubyState: rubyState,
@@ -31845,6 +31916,14 @@ CodeMirror.defineMode("sql", function(config, parserConfig) {
     support: set("ODBCdotTable decimallessFloat zerolessFloat binaryNumber hexNumber nCharCast charsetCast commentHash commentSpaceRequired")
   });
 
+  // Google's SQL-like query language, GQL
+  CodeMirror.defineMIME("text/x-gql", {
+    name: "sql",
+    keywords: set("ancestor and asc by contains desc descendant distinct from group has in is limit offset on order select superset where"),
+    atoms: set("false true"),
+    builtin: set("blob datetime first key __key__ string integer double boolean null"),
+    operatorChars: /^[*+\-%<>!=]/
+  });
 }());
 
 });
@@ -60852,7 +60931,7 @@ require("codemirror/mode/yaml/yaml.js");
 require("codemirror/mode/z80/z80.js");
 
 CodeMirror.modeInfo.push({
-	name: "ObjectiveC", mime: "text/x-objectivec", mode: "clike", ext: ["m", "mm"], alias: ["objc", "objective-c"]
+  name: "ObjectiveC", mime: "text/x-objectivec", mode: "clike", ext: ["m", "mm"], alias: ["objc", "objective-c"]
 });
 
 },{"codemirror":11,"codemirror/mode/apl/apl.js":12,"codemirror/mode/asciiarmor/asciiarmor.js":13,"codemirror/mode/asn.1/asn.1.js":14,"codemirror/mode/asterisk/asterisk.js":15,"codemirror/mode/brainfuck/brainfuck.js":16,"codemirror/mode/clike/clike.js":17,"codemirror/mode/clojure/clojure.js":18,"codemirror/mode/cmake/cmake.js":19,"codemirror/mode/cobol/cobol.js":20,"codemirror/mode/coffeescript/coffeescript.js":21,"codemirror/mode/commonlisp/commonlisp.js":22,"codemirror/mode/css/css.js":23,"codemirror/mode/cypher/cypher.js":24,"codemirror/mode/d/d.js":25,"codemirror/mode/dart/dart.js":26,"codemirror/mode/diff/diff.js":27,"codemirror/mode/django/django.js":28,"codemirror/mode/dockerfile/dockerfile.js":29,"codemirror/mode/dtd/dtd.js":30,"codemirror/mode/dylan/dylan.js":31,"codemirror/mode/ebnf/ebnf.js":32,"codemirror/mode/ecl/ecl.js":33,"codemirror/mode/eiffel/eiffel.js":34,"codemirror/mode/elm/elm.js":35,"codemirror/mode/erlang/erlang.js":36,"codemirror/mode/factor/factor.js":37,"codemirror/mode/forth/forth.js":38,"codemirror/mode/fortran/fortran.js":39,"codemirror/mode/gas/gas.js":40,"codemirror/mode/gfm/gfm.js":41,"codemirror/mode/gherkin/gherkin.js":42,"codemirror/mode/go/go.js":43,"codemirror/mode/groovy/groovy.js":44,"codemirror/mode/haml/haml.js":45,"codemirror/mode/handlebars/handlebars.js":46,"codemirror/mode/haskell/haskell.js":47,"codemirror/mode/haxe/haxe.js":48,"codemirror/mode/htmlembedded/htmlembedded.js":49,"codemirror/mode/htmlmixed/htmlmixed.js":50,"codemirror/mode/http/http.js":51,"codemirror/mode/idl/idl.js":52,"codemirror/mode/jade/jade.js":53,"codemirror/mode/javascript/javascript.js":54,"codemirror/mode/jinja2/jinja2.js":55,"codemirror/mode/julia/julia.js":56,"codemirror/mode/livescript/livescript.js":57,"codemirror/mode/lua/lua.js":58,"codemirror/mode/markdown/markdown.js":59,"codemirror/mode/mathematica/mathematica.js":60,"codemirror/mode/meta.js":61,"codemirror/mode/mirc/mirc.js":62,"codemirror/mode/mllike/mllike.js":63,"codemirror/mode/modelica/modelica.js":64,"codemirror/mode/mscgen/mscgen.js":65,"codemirror/mode/mumps/mumps.js":66,"codemirror/mode/nginx/nginx.js":67,"codemirror/mode/nsis/nsis.js":68,"codemirror/mode/ntriples/ntriples.js":69,"codemirror/mode/octave/octave.js":70,"codemirror/mode/oz/oz.js":71,"codemirror/mode/pascal/pascal.js":72,"codemirror/mode/pegjs/pegjs.js":73,"codemirror/mode/perl/perl.js":74,"codemirror/mode/php/php.js":75,"codemirror/mode/pig/pig.js":76,"codemirror/mode/properties/properties.js":77,"codemirror/mode/puppet/puppet.js":78,"codemirror/mode/python/python.js":79,"codemirror/mode/q/q.js":80,"codemirror/mode/r/r.js":81,"codemirror/mode/rpm/rpm.js":82,"codemirror/mode/rst/rst.js":83,"codemirror/mode/ruby/ruby.js":84,"codemirror/mode/rust/rust.js":85,"codemirror/mode/sass/sass.js":86,"codemirror/mode/scheme/scheme.js":87,"codemirror/mode/shell/shell.js":88,"codemirror/mode/sieve/sieve.js":89,"codemirror/mode/slim/slim.js":90,"codemirror/mode/smalltalk/smalltalk.js":91,"codemirror/mode/smarty/smarty.js":92,"codemirror/mode/solr/solr.js":93,"codemirror/mode/soy/soy.js":94,"codemirror/mode/sparql/sparql.js":95,"codemirror/mode/spreadsheet/spreadsheet.js":96,"codemirror/mode/sql/sql.js":97,"codemirror/mode/stex/stex.js":98,"codemirror/mode/stylus/stylus.js":99,"codemirror/mode/swift/swift.js":100,"codemirror/mode/tcl/tcl.js":101,"codemirror/mode/textile/textile.js":102,"codemirror/mode/tiddlywiki/tiddlywiki.js":103,"codemirror/mode/tiki/tiki.js":104,"codemirror/mode/toml/toml.js":105,"codemirror/mode/tornado/tornado.js":106,"codemirror/mode/troff/troff.js":107,"codemirror/mode/ttcn-cfg/ttcn-cfg.js":108,"codemirror/mode/ttcn/ttcn.js":109,"codemirror/mode/turtle/turtle.js":110,"codemirror/mode/twig/twig.js":111,"codemirror/mode/vb/vb.js":112,"codemirror/mode/vbscript/vbscript.js":113,"codemirror/mode/velocity/velocity.js":114,"codemirror/mode/verilog/verilog.js":115,"codemirror/mode/vhdl/vhdl.js":116,"codemirror/mode/vue/vue.js":117,"codemirror/mode/xml/xml.js":118,"codemirror/mode/xquery/xquery.js":119,"codemirror/mode/yaml/yaml.js":120,"codemirror/mode/z80/z80.js":121}],334:[function(require,module,exports){
@@ -60862,43 +60941,43 @@ CodeMirror.modeInfo.push({
 var CodeMirror = require("codemirror");
 
 CodeMirror.commands.tabAndIndentMarkdownList = function (cm) {
-	var ranges = cm.listSelections();
-	var pos = ranges[0].head;
-	var eolState = cm.getStateAfter(pos.line);
-	var inList = eolState.list !== false;
+  var ranges = cm.listSelections();
+  var pos = ranges[0].head;
+  var eolState = cm.getStateAfter(pos.line);
+  var inList = eolState.list !== false;
 
-	if (inList) {
-		cm.execCommand("indentMore");
-		return;
-	}
+  if (inList) {
+    cm.execCommand("indentMore");
+    return;
+  }
 
-	if (cm.options.indentWithTabs) {
-		cm.execCommand("insertTab");
-	}
-	else {
-		var spaces = Array(cm.options.tabSize + 1).join(" ");
-		cm.replaceSelection(spaces);
-	}
+  if (cm.options.indentWithTabs) {
+    cm.execCommand("insertTab");
+  }
+  else {
+    var spaces = Array(cm.options.tabSize + 1).join(" ");
+    cm.replaceSelection(spaces);
+  }
 };
 
 CodeMirror.commands.shiftTabAndUnindentMarkdownList = function (cm) {
-	var ranges = cm.listSelections();
-	var pos = ranges[0].head;
-	var eolState = cm.getStateAfter(pos.line);
-	var inList = eolState.list !== false;
+  var ranges = cm.listSelections();
+  var pos = ranges[0].head;
+  var eolState = cm.getStateAfter(pos.line);
+  var inList = eolState.list !== false;
 
-	if (inList) {
-		cm.execCommand("indentLess");
-		return;
-	}
+  if (inList) {
+    cm.execCommand("indentLess");
+    return;
+  }
 
-	if (cm.options.indentWithTabs) {
-		cm.execCommand("insertTab");
-	}
-	else {
-		var spaces = Array(cm.options.tabSize + 1).join(" ");
-		cm.replaceSelection(spaces);
-	}
+  if (cm.options.indentWithTabs) {
+    cm.execCommand("insertTab");
+  }
+  else {
+    var spaces = Array(cm.options.tabSize + 1).join(" ");
+    cm.replaceSelection(spaces);
+  }
 };
 
 },{"codemirror":11}],335:[function(require,module,exports){
@@ -60916,14 +60995,14 @@ require("codemirror/mode/markdown/markdown.js");
 require("codemirror/addon/mode/overlay.js");
 require("./codemirror/modes.js");
 /*
-require("codemirror/mode/gfm/gfm.js");
-require("codemirror/mode/javascript/javascript.js");
-require("codemirror/mode/css/css.js");
-require("codemirror/mode/htmlmixed/htmlmixed.js");
-require("codemirror/mode/xml/xml.js");
-require("codemirror/mode/clike/clike.js");
-require("codemirror/mode/swift/swift.js");
-require("codemirror/mode/sql/sql.js");
+   require("codemirror/mode/gfm/gfm.js");
+   require("codemirror/mode/javascript/javascript.js");
+   require("codemirror/mode/css/css.js");
+   require("codemirror/mode/htmlmixed/htmlmixed.js");
+   require("codemirror/mode/xml/xml.js");
+   require("codemirror/mode/clike/clike.js");
+   require("codemirror/mode/swift/swift.js");
+   require("codemirror/mode/sql/sql.js");
 //require("codemirror/mode/meta.js");
 */
 //require("spell-checker");
@@ -60936,28 +61015,28 @@ var Emitter = require("event-kit").Emitter;
 var isMac = /Mac/.test(navigator.platform);
 
 var shortcuts = {
-	"Cmd-B": toggleBold,
-	"Cmd-I": toggleItalic,
-	"Cmd-K": drawLink,
-	// "Cmd-H": toggleHeadingSmaller,
-	// "Shift-Cmd-H": toggleHeadingBigger,
-	"Cmd-Alt-I": drawImage,
-	"Cmd-'": toggleBlockquote,
-	"Shift-Cmd-O": toggleOrderedList,
-	"Shift-Cmd-L": toggleUnorderedList,
-	"Cmd-Alt-C": toggleCodeBlock,
-	"Cmd-P": togglePreview,
-	"Shift-Cmd-P": toggleSideBySide,
-	"Shift-Cmd-H": drawHorizontalRule,
-	"Cmd-U": toggleStrikethrough
+  "Cmd-B": toggleBold,
+  "Cmd-I": toggleItalic,
+  "Cmd-K": drawLink,
+  // "Cmd-H": toggleHeadingSmaller,
+  // "Shift-Cmd-H": toggleHeadingBigger,
+  "Cmd-Alt-I": drawImage,
+  "Cmd-'": toggleBlockquote,
+  "Shift-Cmd-O": toggleOrderedList,
+  "Shift-Cmd-L": toggleUnorderedList,
+  "Cmd-Alt-C": toggleCodeBlock,
+  "Cmd-E": togglePreview,
+  "Cmd-P": toggleSideBySide,
+  "Shift-Cmd-H": drawHorizontalRule,
+  "Cmd-U": toggleStrikethrough
 };
 
 var isMobile = function() {
-	var check = false;
-	(function(a) {
-		if(/(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino|android|ipad|playbook|silk/i.test(a) || /1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(a.substr(0, 4))) check = true;
-	})(navigator.userAgent || navigator.vendor || window.opera);
-	return check;
+  var check = false;
+  (function(a) {
+    if (/(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino|android|ipad|playbook|silk/i.test(a) || /1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(a.substr(0, 4))) check = true;
+  })(navigator.userAgent || navigator.vendor || window.opera);
+  return check;
 };
 
 
@@ -60965,12 +61044,12 @@ var isMobile = function() {
  * Fix shortcut. Mac use Command, others use Ctrl.
  */
 function fixShortcut(name) {
-	if(isMac) {
-		name = name.replace("Ctrl", "Cmd");
-	} else {
-		name = name.replace("Cmd", "Ctrl");
-	}
-	return name;
+  if (isMac) {
+    name = name.replace("Ctrl", "Cmd");
+  } else {
+    name = name.replace("Cmd", "Ctrl");
+  }
+  return name;
 }
 
 
@@ -60978,29 +61057,29 @@ function fixShortcut(name) {
  * Create icon element for toolbar.
  */
 function createIcon(options, enableTooltips) {
-	options = options || {};
-	var el = document.createElement("a");
-	enableTooltips = (enableTooltips == undefined) ? true : enableTooltips;
+  options = options || {};
+  var el = document.createElement("a");
+  enableTooltips = (enableTooltips == undefined) ? true : enableTooltips;
 
-	if(options.title && enableTooltips) {
-		el.title = options.title;
+  if (options.title && enableTooltips) {
+    el.title = options.title;
 
-		if(isMac) {
-			el.title = el.title.replace("Ctrl", "⌘");
-			el.title = el.title.replace("Alt", "⌥");
-			el.title = el.title.replace("Shift", "⇧");
-		}
-	}
+    if (isMac) {
+      el.title = el.title.replace("Ctrl", "⌘");
+      el.title = el.title.replace("Alt", "⌥");
+      el.title = el.title.replace("Shift", "⇧");
+    }
+  }
 
-	el.className = options.className;
-	return el;
+  el.className = options.className;
+  return el;
 }
 
 function createSep() {
-	var el = document.createElement("i");
-	el.className = "separator";
-	el.innerHTML = "|";
-	return el;
+  var el = document.createElement("i");
+  el.className = "separator";
+  el.innerHTML = "|";
+  return el;
 }
 
 
@@ -61008,38 +61087,37 @@ function createSep() {
  * The state of CodeMirror at the given position.
  */
 function getState(cm, pos) {
-	pos = pos || cm.getCursor("start");
-	var stat = cm.getTokenAt(pos);
-	if(!stat.type) return {};
+  pos = pos || cm.getCursor("start");
+  var stat = cm.getTokenAt(pos);
+  if (!stat.type) return {};
 
-	var types = stat.type.split(" ");
+  var types = stat.type.split(" ");
 
-	var ret = {},
-		data, text;
-	for(var i = 0; i < types.length; i++) {
-		data = types[i];
-		if(data === "strong") {
-			ret.bold = true;
-		} else if(data === "variable-2") {
-			text = cm.getLine(pos.line);
-			if(/^\s*\d+\.\s/.test(text)) {
-				ret["ordered-list"] = true;
-			} else {
-				ret["unordered-list"] = true;
-			}
-		} else if(data === "atom") {
-			ret.quote = true;
-		} else if(data === "em") {
-			ret.italic = true;
-		} else if(data === "quote") {
-			ret.quote = true;
-		} else if(data === "strikethrough") {
-			ret.strikethrough = true;
-		} else if(data === "comment") {
-			ret.code = true;
-		}
-	}
-	return ret;
+  var ret = {}, data, text;
+  for (var i = 0; i < types.length; i++) {
+    data = types[i];
+    if (data === "strong") {
+      ret.bold = true;
+    } else if (data === "variable-2") {
+      text = cm.getLine(pos.line);
+      if (/^\s*\d+\.\s/.test(text)) {
+        ret["ordered-list"] = true;
+      } else {
+        ret["unordered-list"] = true;
+      }
+    } else if (data === "atom") {
+      ret.quote = true;
+    } else if (data === "em") {
+      ret.italic = true;
+    } else if (data === "quote") {
+      ret.quote = true;
+    } else if (data === "strikethrough") {
+      ret.strikethrough = true;
+    } else if (data === "comment") {
+      ret.code = true;
+    }
+  }
+  return ret;
 }
 
 
@@ -61050,44 +61128,44 @@ var saved_overflow = "";
  * Toggle full screen of the editor.
  */
 function toggleFullScreen(editor) {
-	// Set fullscreen
-	var cm = editor.codemirror;
-	cm.setOption("fullScreen", !cm.getOption("fullScreen"));
+  // Set fullscreen
+  var cm = editor.codemirror;
+  cm.setOption("fullScreen", !cm.getOption("fullScreen"));
 
 
-	// Prevent scrolling on body during fullscreen active
-	if(cm.getOption("fullScreen")) {
-		saved_overflow = document.body.style.overflow;
-		document.body.style.overflow = "hidden";
-	} else {
-		document.body.style.overflow = saved_overflow;
-	}
+  // Prevent scrolling on body during fullscreen active
+  if (cm.getOption("fullScreen")) {
+    saved_overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = saved_overflow;
+  }
 
 
-	// Update toolbar class
-	var wrap = cm.getWrapperElement();
+  // Update toolbar class
+  var wrap = cm.getWrapperElement();
 
-	if(!/fullscreen/.test(wrap.previousSibling.className)) {
-		wrap.previousSibling.className += " fullscreen";
-	} else {
-		wrap.previousSibling.className = wrap.previousSibling.className.replace(/\s*fullscreen\b/, "");
-	}
-
-
-	// Update toolbar button
-	var toolbarButton = editor.toolbarElements.fullscreen;
-
-	if(!/active/.test(toolbarButton.className)) {
-		toolbarButton.className += " active";
-	} else {
-		toolbarButton.className = toolbarButton.className.replace(/\s*active\s*/g, "");
-	}
+  if (!/fullscreen/.test(wrap.previousSibling.className)) {
+    wrap.previousSibling.className += " fullscreen";
+  } else {
+    wrap.previousSibling.className = wrap.previousSibling.className.replace(/\s*fullscreen\b/, "");
+  }
 
 
-	// Hide side by side if needed
-	var sidebyside = cm.getWrapperElement().nextSibling;
-	if(/editor-preview-active-side/.test(sidebyside.className))
-		toggleSideBySide(editor);
+  // Update toolbar button
+  var toolbarButton = editor.toolbarElements.fullscreen;
+
+  if (!/active/.test(toolbarButton.className)) {
+    toolbarButton.className += " active";
+  } else {
+    toolbarButton.className = toolbarButton.className.replace(/\s*active\s*/g, "");
+  }
+
+
+  // Hide side by side if needed
+  var sidebyside = cm.getWrapperElement().nextSibling;
+  if (/editor-preview-active-side/.test(sidebyside.className))
+    toggleSideBySide(editor);
 }
 
 
@@ -61095,7 +61173,7 @@ function toggleFullScreen(editor) {
  * Action for toggling bold.
  */
 function toggleBold(editor) {
-	_toggleBlock(editor, "bold", "**");
+  _toggleBlock(editor, "bold", "**");
 }
 
 
@@ -61103,7 +61181,7 @@ function toggleBold(editor) {
  * Action for toggling italic.
  */
 function toggleItalic(editor) {
-	_toggleBlock(editor, "italic", "*");
+  _toggleBlock(editor, "italic", "*");
 }
 
 
@@ -61111,70 +61189,70 @@ function toggleItalic(editor) {
  * Action for toggling strikethrough.
  */
 function toggleStrikethrough(editor) {
-	_toggleBlock(editor, "strikethrough", "~~");
+  _toggleBlock(editor, "strikethrough", "~~");
 }
 
 /**
  * Action for toggling code block.
  */
 function toggleCodeBlock(editor) {
-	_toggleBlock(editor, "code", "```\r\n", "\r\n```");
+  _toggleBlock(editor, "code", "```\r\n", "\r\n```");
 }
 
 /**
  * Action for toggling blockquote.
  */
 function toggleBlockquote(editor) {
-	var cm = editor.codemirror;
-	_toggleLine(cm, "quote");
+  var cm = editor.codemirror;
+  _toggleLine(cm, "quote");
 }
 
 /**
  * Action for toggling heading size: normal -> h1 -> h2 -> h3 -> h4 -> h5 -> h6 -> normal
  */
 function toggleHeadingSmaller(editor) {
-	var cm = editor.codemirror;
-	_toggleHeading(cm, "smaller");
+  var cm = editor.codemirror;
+  _toggleHeading(cm, "smaller");
 }
 
 /**
  * Action for toggling heading size: normal -> h6 -> h5 -> h4 -> h3 -> h2 -> h1 -> normal
  */
 function toggleHeadingBigger(editor) {
-	var cm = editor.codemirror;
-	_toggleHeading(cm, "bigger");
+  var cm = editor.codemirror;
+  _toggleHeading(cm, "bigger");
 }
 
 /**
  * Action for toggling heading size 1
  */
 function toggleHeading1(editor) {
-	var cm = editor.codemirror;
-	_toggleHeading(cm, undefined, 1);
+  var cm = editor.codemirror;
+  _toggleHeading(cm, undefined, 1);
 }
 
 /**
  * Action for toggling heading size 2
  */
 function toggleHeading2(editor) {
-	var cm = editor.codemirror;
-	_toggleHeading(cm, undefined, 2);
+  var cm = editor.codemirror;
+  _toggleHeading(cm, undefined, 2);
 }
 
 /**
  * Action for toggling heading size 3
  */
 function toggleHeading3(editor) {
-	var cm = editor.codemirror;
-	_toggleHeading(cm, undefined, 3);
+  var cm = editor.codemirror;
+  _toggleHeading(cm, undefined, 3);
 }
 
 /**
  * Action for toggling heading size 4
  */
 function toggleHeading4(editor) {
-	var cm = editor.codemirror;
-	_toggleHeading(cm, undefined, 4);
+  var cm = editor.codemirror;
+  _toggleHeading(cm, undefined, 4);
 }
 
 
@@ -61182,8 +61260,8 @@ function toggleHeading4(editor) {
  * Action for toggling ul.
  */
 function toggleUnorderedList(editor) {
-	var cm = editor.codemirror;
-	_toggleLine(cm, "unordered-list");
+  var cm = editor.codemirror;
+  _toggleLine(cm, "unordered-list");
 }
 
 
@@ -61191,38 +61269,38 @@ function toggleUnorderedList(editor) {
  * Action for toggling ol.
  */
 function toggleOrderedList(editor) {
-	var cm = editor.codemirror;
-	_toggleLine(cm, "ordered-list");
+  var cm = editor.codemirror;
+  _toggleLine(cm, "ordered-list");
 }
 
 /**
  * Action for drawing a link.
  */
 function drawLink(editor) {
-	var cm = editor.codemirror;
-	var stat = getState(cm);
-	var options = editor.options;
-	_replaceSelection(cm, stat.link, options.insertTexts.link);
+  var cm = editor.codemirror;
+  var stat = getState(cm);
+  var options = editor.options;
+  _replaceSelection(cm, stat.link, options.insertTexts.link);
 }
 
 /**
  * Action for drawing an img.
  */
 function drawImage(editor) {
-	var cm = editor.codemirror;
-	var stat = getState(cm);
-	var options = editor.options;
-	_replaceSelection(cm, stat.image, options.insertTexts.image);
+  var cm = editor.codemirror;
+  var stat = getState(cm);
+  var options = editor.options;
+  _replaceSelection(cm, stat.image, options.insertTexts.image);
 }
 
 /**
  * Action for drawing a horizontal rule.
  */
 function drawHorizontalRule(editor) {
-	var cm = editor.codemirror;
-	var stat = getState(cm);
-	var options = editor.options;
-	_replaceSelection(cm, stat.image, options.insertTexts.horizontalRule);
+  var cm = editor.codemirror;
+  var stat = getState(cm);
+  var options = editor.options;
+  _replaceSelection(cm, stat.image, options.insertTexts.horizontalRule);
 }
 
 
@@ -61230,9 +61308,9 @@ function drawHorizontalRule(editor) {
  * Undo action.
  */
 function undo(editor) {
-	var cm = editor.codemirror;
-	cm.undo();
-	cm.focus();
+  var cm = editor.codemirror;
+  cm.undo();
+  cm.focus();
 }
 
 
@@ -61240,9 +61318,9 @@ function undo(editor) {
  * Redo action.
  */
 function redo(editor) {
-	var cm = editor.codemirror;
-	cm.redo();
-	cm.focus();
+  var cm = editor.codemirror;
+  cm.redo();
+  cm.focus();
 }
 
 
@@ -61250,77 +61328,77 @@ function redo(editor) {
  * Toggle side by side preview
  */
 function toggleSideBySide(editor) {
-	if(isSideBySideEnabled(editor)) {
-		disableSideBySide(editor);
-	} else {
-		enableSideBySide(editor);
-	}
+  if (isSideBySideEnabled(editor)) {
+    disableSideBySide(editor);
+  } else {
+    enableSideBySide(editor);
+  }
 }
 
 function isSideBySideEnabled(editor) {
-	var cm = editor.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.nextSibling;
+  var cm = editor.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
 
-	return /editor-preview-active-side/.test(preview.className);
+  return /editor-preview-active-side/.test(preview.className);
 }
 
 function enableSideBySide(editor) {
-	var cm = editor.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.nextSibling;
-	var toolbarButton = editor.toolbarElements["side-by-side"] || {};
+  var cm = editor.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
+  var toolbarButton = editor.toolbarElements["side-by-side"] || {};
 
-	// Hide normal preview if active
-	if(isPreviewShown(editor)) {
-		hidePreview(editor);
-	}
+  // Hide normal preview if active
+  if (isPreviewShown(editor)) {
+    hidePreview(editor);
+  }
 
-	_.defer(function() {
+  _.defer(function() {
 
-		// When the preview button is clicked for the first time,
-		// give some time for the transition from editor.css to fire and the view to slide from right to left,
-		// instead of just appearing.
-		setTimeout(function() {
-			preview.className += " editor-preview-active-side";
-		}, 1);
-		toolbarButton.className += " active";
-		wrapper.className += " CodeMirror-sided";
+    // When the preview button is clicked for the first time,
+    // give some time for the transition from editor.css to fire and the view to slide from right to left,
+    // instead of just appearing.
+    setTimeout(function() {
+      preview.className += " editor-preview-active-side";
+    }, 1);
+    toolbarButton.className += " active";
+    wrapper.className += " CodeMirror-sided";
 
-		// Start preview with the current text
-		//preview.innerHTML = editor.options.previewRender(editor.value(), preview);
-		editor.updatePreview();
+    // Start preview with the current text
+    //preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+    editor.updatePreview();
 
-		// Updates preview
-		editor._updatePreview = _.throttle(function() {
-			//preview.innerHTML = editor.options.previewRender(editor.value(), preview);
-			editor.updatePreview();
-		}, 1000);
-		cm.on("update", editor._updatePreview);
-		_.defer(function() {
-			cm.refresh();
-			cm = null;
-		});
+    // Updates preview
+    editor._updatePreview = _.throttle(function() {
+      //preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+      editor.updatePreview();
+    }, 1000);
+    cm.on("update", editor._updatePreview);
+    _.defer(function() {
+      cm.refresh();
+      cm = null;
+    });
 
-	});
+  });
 }
 
 function disableSideBySide(editor) {
-	var cm = editor.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.nextSibling;
-	var toolbarButton = editor.toolbarElements["side-by-side"] || {};
+  var cm = editor.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
+  var toolbarButton = editor.toolbarElements["side-by-side"] || {};
 
-	preview.className = preview.className.replace(
-		/\s*editor-preview-active-side\s*/g, ""
-	);
-	toolbarButton.className = toolbarButton.className.replace(/\s*active\s*/g, "");
-	wrapper.className = wrapper.className.replace(/\s*CodeMirror-sided\s*/g, " ");
+  preview.className = preview.className.replace(
+    /\s*editor-preview-active-side\s*/g, ""
+  );
+  toolbarButton.className = toolbarButton.className.replace(/\s*active\s*/g, "");
+  wrapper.className = wrapper.className.replace(/\s*CodeMirror-sided\s*/g, " ");
 
-	// Updates preview
-	cm.off("update", editor._updatePreview);
-	cm.refresh();
-	editor._updatePreview = undefined;
+  // Updates preview
+  cm.off("update", editor._updatePreview);
+  cm.refresh();
+  editor._updatePreview = undefined;
 }
 
 
@@ -61328,465 +61406,467 @@ function disableSideBySide(editor) {
  * Preview action.
  */
 function togglePreview(editor) {
-	if(isPreviewShown(editor)) {
-		hidePreview(editor);
-	} else {
-		showPreview(editor);
-	}
+  if (isPreviewShown(editor)) {
+    hidePreview(editor);
+  } else {
+    showPreview(editor);
+  }
 }
 
 function isPreviewShown(editor) {
-	var cm = editor.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.nextSibling;
+  var cm = editor.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
 
-	return /editor-preview-active([^-]|$)/.test(preview.className);
+  return /editor-preview-active([^-]|$)/.test(preview.className);
 }
 
 function showPreview(editor) {
-	var cm = editor.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var toolbar_div = editor.container.previousSibling;
-	var toolbar = editor.toolbarElements.preview;
-	var preview = wrapper.nextSibling;
+  var cm = editor.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var toolbar_div = editor.container.previousSibling;
+  var toolbar = editor.toolbarElements.preview;
+  var preview = wrapper.nextSibling;
 
-	if(isSideBySideEnabled(editor)) {
-		disableSideBySide(editor);
-	}
+  if (isSideBySideEnabled(editor)) {
+    disableSideBySide(editor);
+  }
 
-	_.defer(function() {
-		// When the preview button is clicked for the first time,
-		// give some time for the transition from editor.css to fire and the view to slide from right to left,
-		// instead of just appearing.
-		setTimeout(function() {
-			preview.className += " editor-preview-active";
-		}, 1);
-		toolbar.className += " active";
-		toolbar_div.className += " disabled-for-preview";
-		wrapper.className += " hidden-for-preview";
-		// preview.innerHTML = editor.options.previewRender(editor.value(), preview);
-		editor.updatePreview();
+  // _.defer(function() {
+  // When the preview button is clicked for the first time,
+  // give some time for the transition from editor.css to fire and the view to slide from right to left,
+  // instead of just appearing.
+  setTimeout(function() {
+    preview.className += " editor-preview-active";
+  }, 1);
+  toolbar.className += " active";
+  toolbar_div.className += " disabled-for-preview";
+  wrapper.className += " hidden-for-preview";
+  // preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+  editor.updatePreview();
 
-		// Turn off side by side if needed
-		if(/editor-preview-active-side/.test(preview.className)) {
-			toggleSideBySide(editor);
-		}
-	});
+  // Turn off side by side if needed
+  if (/editor-preview-active-side/.test(preview.className)) {
+    toggleSideBySide(editor);
+  }
+  //});
 }
 
 function hidePreview(editor) {
-	var cm = editor.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var toolbar_div = editor.container.previousSibling;
-	var toolbar = editor.toolbarElements.preview;
-	var preview = wrapper.nextSibling;
+  var cm = editor.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var toolbar_div = editor.container.previousSibling;
+  var toolbar = editor.toolbarElements.preview;
+  var preview = wrapper.nextSibling;
 
-	preview.className = preview.className.replace(
-		/\s*editor-preview-active\s*/g, ""
-	);
-	wrapper.className = wrapper.className.replace(
-		/\s*hidden-for-preview\s*/g, ""
-	);
-	toolbar.className = toolbar.className.replace(/\s*active\s*/g, "");
-	toolbar_div.className = toolbar_div.className.replace(/\s*disabled-for-preview*/g, "");
+  preview.className = preview.className.replace(
+    /\s*editor-preview-active\s*/g, ""
+  );
+  wrapper.className = wrapper.className.replace(
+    /\s*hidden-for-preview\s*/g, ""
+  );
+  toolbar.className = toolbar.className.replace(/\s*active\s*/g, "");
+  toolbar_div.className = toolbar_div.className.replace(/\s*disabled-for-preview*/g, "");
+
+  cm.refresh();
 }
 
 
 function _replaceSelection(cm, active, startEnd) {
-	if(/editor-preview-active/.test(cm.getWrapperElement().lastChild.className))
-		return;
+  if (/editor-preview-active/.test(cm.getWrapperElement().lastChild.className))
+    return;
 
-	var text;
-	var start = startEnd[0];
-	var end = startEnd[1];
-	var startPoint = cm.getCursor("start");
-	var endPoint = cm.getCursor("end");
-	if(active) {
-		text = cm.getLine(startPoint.line);
-		start = text.slice(0, startPoint.ch);
-		end = text.slice(startPoint.ch);
-		cm.replaceRange(start + end, {
-			line: startPoint.line,
-			ch: 0
-		});
-	} else {
-		text = cm.getSelection();
-		cm.replaceSelection(start + text + end);
+  var text;
+  var start = startEnd[0];
+  var end = startEnd[1];
+  var startPoint = cm.getCursor("start");
+  var endPoint = cm.getCursor("end");
+  if (active) {
+    text = cm.getLine(startPoint.line);
+    start = text.slice(0, startPoint.ch);
+    end = text.slice(startPoint.ch);
+    cm.replaceRange(start + end, {
+      line: startPoint.line,
+      ch: 0
+    });
+  } else {
+    text = cm.getSelection();
+    cm.replaceSelection(start + text + end);
 
-		startPoint.ch += start.length;
-		if(startPoint !== endPoint) {
-			endPoint.ch += start.length;
-		}
-	}
-	cm.setSelection(startPoint, endPoint);
-	cm.focus();
+    startPoint.ch += start.length;
+    if (startPoint !== endPoint) {
+      endPoint.ch += start.length;
+    }
+  }
+  cm.setSelection(startPoint, endPoint);
+  cm.focus();
 }
 
 
 function _toggleHeading(cm, direction, size) {
-	if(/editor-preview-active/.test(cm.getWrapperElement().lastChild.className))
-		return;
+  if (/editor-preview-active/.test(cm.getWrapperElement().lastChild.className))
+    return;
 
-	var startPoint = cm.getCursor("start");
-	var endPoint = cm.getCursor("end");
-	for(var i = startPoint.line; i <= endPoint.line; i++) {
-		(function(i) {
-			var text = cm.getLine(i);
-			var currHeadingLevel = text.search(/[^#]/);
+  var startPoint = cm.getCursor("start");
+  var endPoint = cm.getCursor("end");
+  for (var i = startPoint.line; i <= endPoint.line; i++) {
+    (function(i) {
+      var text = cm.getLine(i);
+      var currHeadingLevel = text.search(/[^#]/);
 
-			if(direction !== undefined) {
-				if(currHeadingLevel <= 0) {
-					if(direction == "bigger") {
-						text = "###### " + text;
-					} else {
-						text = "# " + text;
-					}
-				} else if(currHeadingLevel == 6 && direction == "smaller") {
-					text = text.substr(7);
-				} else if(currHeadingLevel == 1 && direction == "bigger") {
-					text = text.substr(2);
-				} else {
-					if(direction == "bigger") {
-						text = text.substr(1);
-					} else {
-						text = "#" + text;
-					}
-				}
-			} else {
-				if(size == 1) {
-					if(currHeadingLevel <= 0) {
-						text = "# " + text;
-					} else if(currHeadingLevel == size) {
-						text = text.substr(currHeadingLevel + 1);
-					} else {
-						text = "# " + text.substr(currHeadingLevel + 1);
-					}
-				} else if(size == 2) {
-					if(currHeadingLevel <= 0) {
-						text = "## " + text;
-					} else if(currHeadingLevel == size) {
-						text = text.substr(currHeadingLevel + 1);
-					} else {
-						text = "## " + text.substr(currHeadingLevel + 1);
-					}
-				} else if(size == 3) {
-					if(currHeadingLevel <= 0) {
-						text = "### " + text;
-					} else if(currHeadingLevel == size) {
-						text = text.substr(currHeadingLevel + 1);
-					} else {
-						text = "### " + text.substr(currHeadingLevel + 1);
-					}
-				} else {
-					if(currHeadingLevel <= 0) {
-						text = "#### " + text;
-					} else if(currHeadingLevel == size) {
-						text = text.substr(currHeadingLevel + 1);
-					} else {
-						text = "#### " + text.substr(currHeadingLevel + 1);
-					}
-				}
-			}
+      if (direction !== undefined) {
+        if (currHeadingLevel <= 0) {
+          if (direction == "bigger") {
+            text = "###### " + text;
+          } else {
+            text = "# " + text;
+          }
+        } else if (currHeadingLevel == 6 && direction == "smaller") {
+          text = text.substr(7);
+        } else if (currHeadingLevel == 1 && direction == "bigger") {
+          text = text.substr(2);
+        } else {
+          if (direction == "bigger") {
+            text = text.substr(1);
+          } else {
+            text = "#" + text;
+          }
+        }
+      } else {
+        if (size == 1) {
+          if (currHeadingLevel <= 0) {
+            text = "# " + text;
+          } else if (currHeadingLevel == size) {
+            text = text.substr(currHeadingLevel + 1);
+          } else {
+            text = "# " + text.substr(currHeadingLevel + 1);
+          }
+        } else if (size == 2) {
+          if (currHeadingLevel <= 0) {
+            text = "## " + text;
+          } else if (currHeadingLevel == size) {
+            text = text.substr(currHeadingLevel + 1);
+          } else {
+            text = "## " + text.substr(currHeadingLevel + 1);
+          }
+        } else if (size == 3) {
+          if (currHeadingLevel <= 0) {
+            text = "### " + text;
+          } else if (currHeadingLevel == size) {
+            text = text.substr(currHeadingLevel + 1);
+          } else {
+            text = "### " + text.substr(currHeadingLevel + 1);
+          }
+        } else {
+          if (currHeadingLevel <= 0) {
+            text = "#### " + text;
+          } else if (currHeadingLevel == size) {
+            text = text.substr(currHeadingLevel + 1);
+          } else {
+            text = "#### " + text.substr(currHeadingLevel + 1);
+          }
+        }
+      }
 
-			cm.replaceRange(text, {
-				line: i,
-				ch: 0
-			}, {
-				line: i,
-				ch: 99999999999999
-			});
-		})(i);
-	}
-	cm.focus();
+      cm.replaceRange(text, {
+        line: i,
+        ch: 0
+      }, {
+        line: i,
+        ch: 99999999999999
+      });
+    })(i);
+  }
+  cm.focus();
 }
 
 
 function _toggleLine(cm, name) {
-	if(/editor-preview-active/.test(cm.getWrapperElement().lastChild.className))
-		return;
+  if (/editor-preview-active/.test(cm.getWrapperElement().lastChild.className))
+    return;
 
-	var stat = getState(cm);
-	var startPoint = cm.getCursor("start");
-	var endPoint = cm.getCursor("end");
-	var repl = {
-		"quote": /^(\s*)\>\s+/,
-		"unordered-list": /^(\s*)(\*|\-|\+)\s+/,
-		"ordered-list": /^(\s*)\d+\.\s+/
-	};
-	var map = {
-		"quote": "> ",
-		"unordered-list": "* ",
-		"ordered-list": "1. "
-	};
-	for(var i = startPoint.line; i <= endPoint.line; i++) {
-		(function(i) {
-			var text = cm.getLine(i);
-			if(stat[name]) {
-				text = text.replace(repl[name], "$1");
-			} else {
-				text = map[name] + text;
-			}
-			cm.replaceRange(text, {
-				line: i,
-				ch: 0
-			}, {
-				line: i,
-				ch: 99999999999999
-			});
-		})(i);
-	}
-	cm.focus();
+  var stat = getState(cm);
+  var startPoint = cm.getCursor("start");
+  var endPoint = cm.getCursor("end");
+  var repl = {
+    "quote": /^(\s*)\>\s+/,
+    "unordered-list": /^(\s*)(\*|\-|\+)\s+/,
+    "ordered-list": /^(\s*)\d+\.\s+/
+  };
+  var map = {
+    "quote": "> ",
+    "unordered-list": "* ",
+    "ordered-list": "1. "
+  };
+  for (var i = startPoint.line; i <= endPoint.line; i++) {
+    (function(i) {
+      var text = cm.getLine(i);
+      if (stat[name]) {
+        text = text.replace(repl[name], "$1");
+      } else {
+        text = map[name] + text;
+      }
+      cm.replaceRange(text, {
+        line: i,
+        ch: 0
+      }, {
+        line: i,
+        ch: 99999999999999
+      });
+    })(i);
+  }
+  cm.focus();
 }
 
 function _toggleBlock(editor, type, start_chars, end_chars) {
-	if(/editor-preview-active/.test(editor.codemirror.getWrapperElement().lastChild.className))
-		return;
+  if (/editor-preview-active/.test(editor.codemirror.getWrapperElement().lastChild.className))
+    return;
 
-	end_chars = (typeof end_chars === "undefined") ? start_chars : end_chars;
-	var cm = editor.codemirror;
-	var stat = getState(cm);
+  end_chars = (typeof end_chars === "undefined") ? start_chars : end_chars;
+  var cm = editor.codemirror;
+  var stat = getState(cm);
 
-	var text;
-	var start = start_chars;
-	var end = end_chars;
+  var text;
+  var start = start_chars;
+  var end = end_chars;
 
-	var startPoint = cm.getCursor("start");
-	var endPoint = cm.getCursor("end");
+  var startPoint = cm.getCursor("start");
+  var endPoint = cm.getCursor("end");
 
-	if(stat[type]) {
-		text = cm.getLine(startPoint.line);
-		start = text.slice(0, startPoint.ch);
-		end = text.slice(startPoint.ch);
-		if(type == "bold") {
-			start = start.replace(/(\*\*|__)(?![\s\S]*(\*\*|__))/, "");
-			end = end.replace(/(\*\*|__)/, "");
-		} else if(type == "italic") {
-			start = start.replace(/(\*|_)(?![\s\S]*(\*|_))/, "");
-			end = end.replace(/(\*|_)/, "");
-		} else if(type == "strikethrough") {
-			start = start.replace(/(\*\*|~~)(?![\s\S]*(\*\*|~~))/, "");
-			end = end.replace(/(\*\*|~~)/, "");
-		}
-		cm.replaceRange(start + end, {
-			line: startPoint.line,
-			ch: 0
-		}, {
-			line: startPoint.line,
-			ch: 99999999999999
-		});
+  if (stat[type]) {
+    text = cm.getLine(startPoint.line);
+    start = text.slice(0, startPoint.ch);
+    end = text.slice(startPoint.ch);
+    if (type == "bold") {
+      start = start.replace(/(\*\*|__)(?![\s\S]*(\*\*|__))/, "");
+      end = end.replace(/(\*\*|__)/, "");
+    } else if (type == "italic") {
+      start = start.replace(/(\*|_)(?![\s\S]*(\*|_))/, "");
+      end = end.replace(/(\*|_)/, "");
+    } else if (type == "strikethrough") {
+      start = start.replace(/(\*\*|~~)(?![\s\S]*(\*\*|~~))/, "");
+      end = end.replace(/(\*\*|~~)/, "");
+    }
+    cm.replaceRange(start + end, {
+      line: startPoint.line,
+      ch: 0
+    }, {
+      line: startPoint.line,
+      ch: 99999999999999
+    });
 
-		if(type == "bold" || type == "strikethrough") {
-			startPoint.ch -= 2;
-			if(startPoint !== endPoint) {
-				endPoint.ch -= 2;
-			}
-		} else if(type == "italic") {
-			startPoint.ch -= 1;
-			if(startPoint !== endPoint) {
-				endPoint.ch -= 1;
-			}
-		}
-	} else {
-		text = cm.getSelection();
-		if(type == "bold") {
-			text = text.split("**").join("");
-			text = text.split("__").join("");
-		} else if(type == "italic") {
-			text = text.split("*").join("");
-			text = text.split("_").join("");
-		} else if(type == "strikethrough") {
-			text = text.split("~~").join("");
-		}
-		cm.replaceSelection(start + text + end);
+    if (type == "bold" || type == "strikethrough") {
+      startPoint.ch -= 2;
+      if (startPoint !== endPoint) {
+        endPoint.ch -= 2;
+      }
+    } else if (type == "italic") {
+      startPoint.ch -= 1;
+      if (startPoint !== endPoint) {
+        endPoint.ch -= 1;
+      }
+    }
+  } else {
+    text = cm.getSelection();
+    if (type == "bold") {
+      text = text.split("**").join("");
+      text = text.split("__").join("");
+    } else if (type == "italic") {
+      text = text.split("*").join("");
+      text = text.split("_").join("");
+    } else if (type == "strikethrough") {
+      text = text.split("~~").join("");
+    }
+    cm.replaceSelection(start + text + end);
 
-		startPoint.ch += start_chars.length;
-		endPoint.ch = startPoint.ch + text.length;
-	}
+    startPoint.ch += start_chars.length;
+    endPoint.ch = startPoint.ch + text.length;
+  }
 
-	cm.setSelection(startPoint, endPoint);
-	cm.focus();
+  cm.setSelection(startPoint, endPoint);
+  cm.focus();
 }
 
 // Merge the properties of one object into another.
 function _mergeProperties(target, source) {
-	for(var property in source) {
-		if(source.hasOwnProperty(property)) {
-			if(source[property] instanceof Array) {
-				target[property] = source[property].concat(target[property] instanceof Array ? target[property] : []);
-			} else if(
-				source[property] !== null &&
-				typeof source[property] === "object" &&
-				source[property].constructor === Object
-			) {
-				target[property] = _mergeProperties(target[property] || {}, source[property]);
-			} else {
-				target[property] = source[property];
-			}
-		}
-	}
+  for (var property in source) {
+    if (source.hasOwnProperty(property)) {
+      if (source[property] instanceof Array) {
+        target[property] = source[property].concat(target[property] instanceof Array ? target[property] : []);
+      } else if (
+        source[property] !== null &&
+        typeof source[property] === "object" &&
+          source[property].constructor === Object
+      ) {
+        target[property] = _mergeProperties(target[property] || {}, source[property]);
+      } else {
+        target[property] = source[property];
+      }
+    }
+  }
 
-	return target;
+  return target;
 }
 
 // Merge an arbitrary number of objects into one.
 function extend(target) {
-	for(var i = 1; i < arguments.length; i++) {
-		target = _mergeProperties(target, arguments[i]);
-	}
+  for (var i = 1; i < arguments.length; i++) {
+    target = _mergeProperties(target, arguments[i]);
+  }
 
-	return target;
+  return target;
 }
 
 /* The right word count in respect for CJK. */
 function wordCount(data) {
-	var pattern = /[a-zA-Z0-9_\u0392-\u03c9]+|[\u4E00-\u9FFF\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\uac00-\ud7af]+/g;
-	var m = data.match(pattern);
-	var count = 0;
-	if(m === null) return count;
-	for(var i = 0; i < m.length; i++) {
-		if(m[i].charCodeAt(0) >= 0x4E00) {
-			count += m[i].length;
-		} else {
-			count += 1;
-		}
-	}
-	return count;
+  var pattern = /[a-zA-Z0-9_\u0392-\u03c9]+|[\u4E00-\u9FFF\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\uac00-\ud7af]+/g;
+  var m = data.match(pattern);
+  var count = 0;
+  if (m === null) return count;
+  for (var i = 0; i < m.length; i++) {
+    if (m[i].charCodeAt(0) >= 0x4E00) {
+      count += m[i].length;
+    } else {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 
 var toolbarBuiltInButtons = {
-	"bold": {
-		name: "bold",
-		action: toggleBold,
-		className: "fa fa-bold",
-		title: "Bold (Ctrl+B)"
-	},
-	"italic": {
-		name: "italic",
-		action: toggleItalic,
-		className: "fa fa-italic",
-		title: "Italic (Ctrl+I)"
-	},
-	"strikethrough": {
-		name: "strikethrough",
-		action: toggleStrikethrough,
-		className: "fa fa-strikethrough",
-		title: "Strikethrough"
-	},
-	"heading": {
-		name: "heading",
-		action: toggleHeadingSmaller,
-		className: "fa fa-header",
-		title: "Heading"
-	},
-	"heading-smaller": {
-		name: "heading-smaller",
-		action: toggleHeadingSmaller,
-		className: "fa fa-header fa-header-x fa-header-smaller",
-		title: "Smaller Heading"
-	},
-	"heading-bigger": {
-		name: "heading-bigger",
-		action: toggleHeadingBigger,
-		className: "fa fa-header fa-header-x fa-header-bigger",
-		title: "Bigger Heading"
-	},
-	"heading-1": {
-		name: "heading-1",
-		action: toggleHeading1,
-		className: "fa fa-header fa-header-x fa-header-1",
-		title: "Big Heading"
-	},
-	"heading-2": {
-		name: "heading-2",
-		action: toggleHeading2,
-		className: "fa fa-header fa-header-x fa-header-2",
-		title: "Medium Heading"
-	},
-	"heading-3": {
-		name: "heading-3",
-		action: toggleHeading3,
-		className: "fa fa-header fa-header-x fa-header-3",
-		title: "Small Heading"
-	},
-	"heading-4": {
-		name: "heading-4",
-		action: toggleHeading4,
-		className: "fa fa-header fa-header-x fa-header-4",
-		title: "Small Heading"
-	},
-	"code": {
-		name: "code",
-		action: toggleCodeBlock,
-		className: "fa fa-code",
-		title: "Code (Ctrl+Alt+C)"
-	},
-	"quote": {
-		name: "quote",
-		action: toggleBlockquote,
-		className: "fa fa-quote-left",
-		title: "Quote (Ctrl+')"
-	},
-	"unordered-list": {
-		name: "unordered-list",
-		action: toggleUnorderedList,
-		className: "fa fa-list-ul",
-		title: "Generic List (Shift+Ctrl+U)"
-	},
-	"ordered-list": {
-		name: "ordered-list",
-		action: toggleOrderedList,
-		className: "fa fa-list-ol",
-		title: "Numbered List (Shift+Ctrl+O)"
-	},
-	"link": {
-		name: "link",
-		action: drawLink,
-		className: "fa fa-link",
-		title: "Create Link (Ctrl+K)"
-	},
-	"image": {
-		name: "image",
-		action: drawImage,
-		className: "fa fa-picture-o",
-		title: "Insert Image (Ctrl+Alt+I)"
-	},
-	"horizontal-rule": {
-		name: "horizontal-rule",
-		action: drawHorizontalRule,
-		className: "fa fa-minus",
-		title: "Insert Horizontal Line (Shift+Ctrl+H)"
-	},
-	"preview": {
-		name: "preview",
-		action: togglePreview,
-		className: "fa fa-eye no-disable",
-		title: "Toggle Preview (Ctrl+P)"
-	},
-	"side-by-side": {
-		name: "side-by-side",
-		action: toggleSideBySide,
-		className: "fa fa-columns no-disable no-mobile",
-		title: "Toggle Side by Side (Ctrl+Shift+P)"
-	},
-	"fullscreen": {
-		name: "fullscreen",
-		action: toggleFullScreen,
-		className: "fa fa-arrows-alt no-disable no-mobile",
-		title: "Toggle Fullscreen (F11)"
-	},
-	"guide": {
-		name: "guide",
-		action: "http://nextstepwebs.github.io/simplemde-markdown-editor/markdown-guide",
-		className: "fa fa-question-circle",
-		title: "Markdown Guide"
-	}
+  "bold": {
+    name: "bold",
+    action: toggleBold,
+    className: "fa fa-bold",
+    title: "Bold (Ctrl+B)"
+  },
+  "italic": {
+    name: "italic",
+    action: toggleItalic,
+    className: "fa fa-italic",
+    title: "Italic (Ctrl+I)"
+  },
+  "strikethrough": {
+    name: "strikethrough",
+    action: toggleStrikethrough,
+    className: "fa fa-strikethrough",
+    title: "Strikethrough"
+  },
+  "heading": {
+    name: "heading",
+    action: toggleHeadingSmaller,
+    className: "fa fa-header",
+    title: "Heading"
+  },
+  "heading-smaller": {
+    name: "heading-smaller",
+    action: toggleHeadingSmaller,
+    className: "fa fa-header fa-header-x fa-header-smaller",
+    title: "Smaller Heading"
+  },
+  "heading-bigger": {
+    name: "heading-bigger",
+    action: toggleHeadingBigger,
+    className: "fa fa-header fa-header-x fa-header-bigger",
+    title: "Bigger Heading"
+  },
+  "heading-1": {
+    name: "heading-1",
+    action: toggleHeading1,
+    className: "fa fa-header fa-header-x fa-header-1",
+    title: "Big Heading"
+  },
+  "heading-2": {
+    name: "heading-2",
+    action: toggleHeading2,
+    className: "fa fa-header fa-header-x fa-header-2",
+    title: "Medium Heading"
+  },
+  "heading-3": {
+    name: "heading-3",
+    action: toggleHeading3,
+    className: "fa fa-header fa-header-x fa-header-3",
+    title: "Small Heading"
+  },
+  "heading-4": {
+    name: "heading-4",
+    action: toggleHeading4,
+    className: "fa fa-header fa-header-x fa-header-4",
+    title: "Small Heading"
+  },
+  "code": {
+    name: "code",
+    action: toggleCodeBlock,
+    className: "fa fa-code",
+    title: "Code (Ctrl+Alt+C)"
+  },
+  "quote": {
+    name: "quote",
+    action: toggleBlockquote,
+    className: "fa fa-quote-left",
+    title: "Quote (Ctrl+')"
+  },
+  "unordered-list": {
+    name: "unordered-list",
+    action: toggleUnorderedList,
+    className: "fa fa-list-ul",
+    title: "Generic List (Shift+Ctrl+U)"
+  },
+  "ordered-list": {
+    name: "ordered-list",
+    action: toggleOrderedList,
+    className: "fa fa-list-ol",
+    title: "Numbered List (Shift+Ctrl+O)"
+  },
+  "link": {
+    name: "link",
+    action: drawLink,
+    className: "fa fa-link",
+    title: "Create Link (Ctrl+K)"
+  },
+  "image": {
+    name: "image",
+    action: drawImage,
+    className: "fa fa-picture-o",
+    title: "Insert Image (Ctrl+Alt+I)"
+  },
+  "horizontal-rule": {
+    name: "horizontal-rule",
+    action: drawHorizontalRule,
+    className: "fa fa-minus",
+    title: "Insert Horizontal Line (Shift+Ctrl+H)"
+  },
+  "preview": {
+    name: "preview",
+    action: togglePreview,
+    className: "fa fa-eye no-disable",
+    title: "Toggle Preview (Ctrl+P)"
+  },
+  "side-by-side": {
+    name: "side-by-side",
+    action: toggleSideBySide,
+    className: "fa fa-columns no-disable no-mobile",
+    title: "Toggle Side by Side (Ctrl+Shift+P)"
+  },
+  "fullscreen": {
+    name: "fullscreen",
+    action: toggleFullScreen,
+    className: "fa fa-arrows-alt no-disable no-mobile",
+    title: "Toggle Fullscreen (F11)"
+  },
+  "guide": {
+    name: "guide",
+    action: "http://nextstepwebs.github.io/simplemde-markdown-editor/markdown-guide",
+    className: "fa fa-question-circle",
+    title: "Markdown Guide"
+  }
 };
 
 var insertTexts = {
-	link: ["[", "](http://)"],
-	image: ["![](http://", ")"],
-	horizontalRule: ["", "\n\n-----\n\n"]
+  link: ["[", "](http://)"],
+  image: ["![](http://", ")"],
+  horizontalRule: ["", "\n\n-----\n\n"]
 };
 
 
@@ -61794,114 +61874,114 @@ var insertTexts = {
  * Interface of SimpleMDE.
  */
 function SimpleMDE(options) {
-	// Handle options parameter
-	options = options || {};
+  // Handle options parameter
+  options = options || {};
 
 
-	// Used later to refer to it"s parent
-	options.parent = this;
+  // Used later to refer to it"s parent
+  options.parent = this;
 
 
-	// Check if Font Awesome needs to be auto downloaded
-	var autoDownloadFA = true;
+  // Check if Font Awesome needs to be auto downloaded
+  var autoDownloadFA = true;
 
-	if(options.autoDownloadFontAwesome === false) {
-		autoDownloadFA = false;
-	}
+  if (options.autoDownloadFontAwesome === false) {
+    autoDownloadFA = false;
+  }
 
-	if(options.autoDownloadFontAwesome !== true) {
-		var styleSheets = document.styleSheets;
-		for(var i = 0; i < styleSheets.length; i++) {
-			if(!styleSheets[i].href)
-				continue;
+  if (options.autoDownloadFontAwesome !== true) {
+    var styleSheets = document.styleSheets;
+    for (var i = 0; i < styleSheets.length; i++) {
+      if (!styleSheets[i].href)
+        continue;
 
-			if(styleSheets[i].href.indexOf("//maxcdn.bootstrapcdn.com/font-awesome/") > -1) {
-				autoDownloadFA = false;
-			}
-		}
-	}
+      if (styleSheets[i].href.indexOf("//maxcdn.bootstrapcdn.com/font-awesome/") > -1) {
+        autoDownloadFA = false;
+      }
+    }
+  }
 
-	if(autoDownloadFA) {
-		var link = document.createElement("link");
-		link.rel = "stylesheet";
-		link.href = "https://maxcdn.bootstrapcdn.com/font-awesome/latest/css/font-awesome.min.css";
-		document.getElementsByTagName("head")[0].appendChild(link);
-	}
-
-
-	// Find the textarea to use
-	if(options.element) {
-		this.element = options.element;
-	} else if(options.element === null) {
-		// This means that the element option was specified, but no element was found
-		console.log("SimpleMDE: Error. No element was found.");
-		return;
-	}
+  if (autoDownloadFA) {
+    var link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://maxcdn.bootstrapcdn.com/font-awesome/latest/css/font-awesome.min.css";
+    document.getElementsByTagName("head")[0].appendChild(link);
+  }
 
 
-	// Handle toolbar and status bar
-	if(options.toolbar !== false)
-		options.toolbar = options.toolbar || SimpleMDE.toolbar;
-
-	if(!options.hasOwnProperty("status")) {
-		options.status = ["autosave", "lines", "words", "cursor"];
-	}
-
-
-	// Add default preview rendering function
-	if(!options.previewRender) {
-		options.previewRender = function(plainText) {
-			// Note: "this" refers to the options object
-			return this.parent.markdown(plainText);
-		};
-	}
+  // Find the textarea to use
+  if (options.element) {
+    this.element = options.element;
+  } else if (options.element === null) {
+    // This means that the element option was specified, but no element was found
+    console.log("SimpleMDE: Error. No element was found.");
+    return;
+  }
 
 
-	// Set default options for parsing config
-	options.parsingConfig = options.parsingConfig || {};
+  // Handle toolbar and status bar
+  if (options.toolbar !== false)
+    options.toolbar = options.toolbar || SimpleMDE.toolbar;
+
+  if (!options.hasOwnProperty("status")) {
+    options.status = ["autosave", "lines", "words", "cursor"];
+  }
 
 
-	// Merging the insertTexts, with the given options
-	options.insertTexts = extend({}, insertTexts, options.insertTexts || {});
+  // Add default preview rendering function
+  if (!options.previewRender) {
+    options.previewRender = function(plainText) {
+      // Note: "this" refers to the options object
+      return this.parent.markdown(plainText);
+    };
+  }
 
 
-	// Update this options
-	this.options = options;
-
-	this.emitter = new Emitter();
-
-	// Auto render
-	this.render();
+  // Set default options for parsing config
+  options.parsingConfig = options.parsingConfig || {};
 
 
-	// The codemirror component is only available after rendering
-	// so, the setter for the initialValue can only run after
-	// the element has been rendered
-	if(options.initialValue) {
-		this.value(options.initialValue);
-	}
+  // Merging the insertTexts, with the given options
+  options.insertTexts = extend({}, insertTexts, options.insertTexts || {});
 
-	// Initialize markdown-it
-	this.md = md({
-		linkify: true,
-		breaks: options.renderingConfig && options.renderingConfig.singleLineBreaks,
-		highlight: function(code, lang) {
-			try {
-				if(lang && hljs.getLanguage(lang)) {
-					return hljs.highlight(lang, code).value;
-				}
-				return hljs.highlightAuto(code).value;
-			} catch(__) {
-				return ""; // use external default escaping
-			}
-		}
-	});
 
-	/*
-	this.md.use(require("markdown-it-checkbox"), {
-		divWrap: true,
-		divClass: "ui checkbox"
-	});*/
+  // Update this options
+  this.options = options;
+
+  this.emitter = new Emitter();
+
+  // Auto render
+  this.render();
+
+  // The codemirror component is only available after rendering
+  // so, the setter for the initialValue can only run after
+  // the element has been rendered
+  if (options.initialValue) {
+    this.value(options.initialValue);
+  }
+
+  // Initialize markdown-it
+  this.md = md({
+    linkify: true,
+    breaks: options.renderingConfig && options.renderingConfig.singleLineBreaks,
+    highlight: function(code, lang) {
+      try {
+        if (lang && hljs.getLanguage(lang)) {
+          return hljs.highlight(lang, code).value;
+        }
+        return hljs.highlightAuto(code).value;
+      } catch (__) {
+        return ""; // use external default escaping
+      }
+    }
+  });
+
+  /*
+  this.md.use(require("markdown-it-checkbox"), {
+    divWrap: true,
+    divClass: "ui checkbox"
+  });
+  */
 }
 
 /**
@@ -61913,338 +61993,338 @@ SimpleMDE.toolbar = ["bold", "italic", "heading", "|", "quote", "unordered-list"
  * Default markdown render.
  */
 SimpleMDE.prototype.markdown = function(text) {
-	return this.md.render(text);
+  return this.md.render(text);
 };
 
 SimpleMDE.prototype.destroy = function() {
-	this.container.parentNode.removeChild(this.container);
-	this.toolbarContainer.parentNode.removeChild(this.toolbarContainer);
-	this.emitter.dispose();
+  this.container.parentNode.removeChild(this.container);
+  this.toolbarContainer.parentNode.removeChild(this.toolbarContainer);
+  this.emitter.dispose();
 };
 
 /**
  * Render editor to the given element.
  */
 SimpleMDE.prototype.render = function(el) {
-	if(!el) {
-		el = this.element || document.getElementsByTagName("textarea")[0];
-	}
+  if (!el) {
+    el = this.element || document.getElementsByTagName("textarea")[0];
+  }
 
-	if(this._rendered && this._rendered === el) {
-		// Already rendered.
-		return;
-	}
+  if (this._rendered && this._rendered === el) {
+    // Already rendered.
+    return;
+  }
 
-	this.element = el;
-	var options = this.options;
+  this.element = el;
+  var options = this.options;
 
-	var self = this;
-	var keyMaps = {};
+  var self = this;
+  var keyMaps = {};
 
-	for(var key in shortcuts) {
-		(function(key) {
-			keyMaps[fixShortcut(key)] = function() {
-				shortcuts[key](self);
-			};
-		})(key);
-	}
+  for (var key in shortcuts) {
+    (function(key) {
+      keyMaps[fixShortcut(key)] = function() {
+        shortcuts[key](self);
+      };
+    })(key);
+  }
 
-	keyMaps["Enter"] = "newlineAndIndentContinueMarkdownList";
-	keyMaps["Tab"] = "tabAndIndentMarkdownList";
-	keyMaps["Shift-Tab"] = "shiftTabAndUnindentMarkdownList";
-	keyMaps["F11"] = function() {
-		toggleFullScreen(self);
-	};
-	keyMaps["F9"] = function() {
-		toggleSideBySide(self);
-	};
-	/*
-		keyMaps["Esc"] = function(cm) {
-			if(cm.getOption("fullScreen")) toggleFullScreen(self);
-		};*/
+  keyMaps["Enter"] = "newlineAndIndentContinueMarkdownList";
+  keyMaps["Tab"] = "tabAndIndentMarkdownList";
+  keyMaps["Shift-Tab"] = "shiftTabAndUnindentMarkdownList";
+  keyMaps["F11"] = function() {
+    toggleFullScreen(self);
+  };
+  keyMaps["F9"] = function() {
+    toggleSideBySide(self);
+  };
+  /*
+     keyMaps["Esc"] = function(cm) {
+     if(cm.getOption("fullScreen")) toggleFullScreen(self);
+     };*/
 
-	var mode, backdrop;
-	if(options.spellChecker !== false) {
-		mode = "spell-checker";
-		backdrop = options.parsingConfig;
-		backdrop.name = "gfm";
-		backdrop.gitHubSpice = false;
-	} else {
-		mode = options.parsingConfig;
-		mode.name = "gfm";
-		mode.highlightFormatting = true;
-		mode.gitHubSpice = false;
-	}
+  var mode, backdrop;
+  if (options.spellChecker !== false) {
+    mode = "spell-checker";
+    backdrop = options.parsingConfig;
+    backdrop.name = "gfm";
+    backdrop.gitHubSpice = false;
+  } else {
+    mode = options.parsingConfig;
+    mode.name = "gfm";
+    mode.highlightFormatting = true;
+    mode.gitHubSpice = false;
+  }
 
-	this.codemirror = CodeMirror.fromTextArea(el, {
-		mode: mode,
-		showCursorWhenSelecting: true,
-		backdrop: backdrop,
-		placeholder: options.placeholder || "",
-		theme: options.theme || "solarized-dark",
-		tabSize: (options.tabSize != undefined) ? options.tabSize : 2,
-		indentUnit: (options.tabSize != undefined) ? options.tabSize : 2,
-		indentWithTabs: (options.indentWithTabs === false) ? false : true,
-		lineNumbers: false,
-		autofocus: (options.autofocus === true) ? true : false,
-		extraKeys: keyMaps,
-		lineWrapping: (options.lineWrapping === false) ? false : true,
-		allowDropFileTypes: ["text/plain"],
-		viewportMargin: 10,
-		matchBrackets: true
-	});
+  this.codemirror = CodeMirror.fromTextArea(el, {
+    mode: mode,
+    showCursorWhenSelecting: true,
+    backdrop: backdrop,
+    placeholder: options.placeholder || "",
+    theme: options.theme || "solarized-dark",
+    tabSize: (options.tabSize != undefined) ? options.tabSize : 2,
+    indentUnit: (options.tabSize != undefined) ? options.tabSize : 2,
+    indentWithTabs: (options.indentWithTabs === false) ? false : true,
+    lineNumbers: false,
+    autofocus: (options.autofocus === true) ? true : false,
+    extraKeys: keyMaps,
+    lineWrapping: (options.lineWrapping === false) ? false : true,
+    allowDropFileTypes: ["text/plain"],
+    viewportMargin: 10,
+    matchBrackets: true
+  });
 
-	var container = document.createElement("div");
-	container.className = "editor-container";
-	container.appendChild(this.codemirror.getWrapperElement());
-	el.parentNode.insertBefore(container, el.nextSibling);
-	this.container = container;
+  var container = document.createElement("div");
+  container.className = "editor-container";
+  container.appendChild(this.codemirror.getWrapperElement());
+  el.parentNode.insertBefore(container, el.nextSibling);
+  this.container = container;
 
-	if(options.toolbar !== false) {
-		this.toolbarContainer = this.createToolbar();
-	}
-	if(options.status !== false) {
-		this.createStatusbar();
-	}
-	if(options.autosave != undefined && options.autosave.enabled === true) {
-		this.autosave();
-	}
+  if (options.toolbar !== false) {
+    this.toolbarContainer = this.createToolbar();
+  }
+  if (options.status !== false) {
+    this.createStatusbar();
+  }
+  if (options.autosave != undefined && options.autosave.enabled === true) {
+    this.autosave();
+  }
 
-	this.createSideBySide();
+  this.createSideBySide();
 
-	this._rendered = this.element;
+  this._rendered = this.element;
 };
 
 SimpleMDE.prototype.autosave = function() {
-	var content = this.value();
-	var simplemde = this;
+  var content = this.value();
+  var simplemde = this;
 
-	if(this.options.autosave.unique_id == undefined || this.options.autosave.unique_id == "") {
-		console.log("SimpleMDE: You must set a unique_id to use the autosave feature");
-		return;
-	}
+  if (this.options.autosave.unique_id == undefined || this.options.autosave.unique_id == "") {
+    console.log("SimpleMDE: You must set a unique_id to use the autosave feature");
+    return;
+  }
 
-	if(simplemde.element.form != null && simplemde.element.form != undefined) {
-		simplemde.element.form.addEventListener("submit", function() {
-			localStorage.setItem(simplemde.options.autosave.unique_id, "");
-		});
-	}
+  if (simplemde.element.form != null && simplemde.element.form != undefined) {
+    simplemde.element.form.addEventListener("submit", function() {
+      localStorage.setItem(simplemde.options.autosave.unique_id, "");
+    });
+  }
 
-	if(this.options.autosave.loaded !== true) {
-		if(typeof localStorage.getItem(this.options.autosave.unique_id) == "string" && localStorage.getItem(this.options.autosave.unique_id) != "")
-			this.codemirror.setValue(localStorage.getItem(this.options.autosave.unique_id));
+  if (this.options.autosave.loaded !== true) {
+    if (typeof localStorage.getItem(this.options.autosave.unique_id) == "string" && localStorage.getItem(this.options.autosave.unique_id) != "")
+      this.codemirror.setValue(localStorage.getItem(this.options.autosave.unique_id));
 
-		this.options.autosave.loaded = true;
-	}
+    this.options.autosave.loaded = true;
+  }
 
-	if(localStorage) {
-		localStorage.setItem(this.options.autosave.unique_id, content);
-	}
+  if (localStorage) {
+    localStorage.setItem(this.options.autosave.unique_id, content);
+  }
 
-	var el = document.getElementById("autosaved");
-	if(el != null && el != undefined && el != "") {
-		var d = new Date();
-		var hh = d.getHours();
-		var m = d.getMinutes();
-		var dd = "am";
-		var h = hh;
-		if(h >= 12) {
-			h = hh - 12;
-			dd = "pm";
-		}
-		if(h == 0) {
-			h = 12;
-		}
-		m = m < 10 ? "0" + m : m;
+  var el = document.getElementById("autosaved");
+  if (el != null && el != undefined && el != "") {
+    var d = new Date();
+    var hh = d.getHours();
+    var m = d.getMinutes();
+    var dd = "am";
+    var h = hh;
+    if (h >= 12) {
+      h = hh - 12;
+      dd = "pm";
+    }
+    if (h == 0) {
+      h = 12;
+    }
+    m = m < 10 ? "0" + m : m;
 
-		el.innerHTML = "Autosaved: " + h + ":" + m + " " + dd;
-	}
+    el.innerHTML = "Autosaved: " + h + ":" + m + " " + dd;
+  }
 
-	setTimeout(function() {
-		simplemde.autosave();
-	}, this.options.autosave.delay || 10000);
+  setTimeout(function() {
+    simplemde.autosave();
+  }, this.options.autosave.delay || 10000);
 };
 
 SimpleMDE.prototype.createSideBySide = function() {
-	var cm = this.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.nextSibling;
+  var cm = this.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
 
-	if(!preview || !/editor-preview-side/.test(preview.className)) {
-		preview = document.createElement("div");
-		preview.className = "editor-preview-side markdown-body";
-		wrapper.parentNode.insertBefore(preview, wrapper.nextSibling);
-	}
+  if (!preview || !/editor-preview-side/.test(preview.className)) {
+    preview = document.createElement("div");
+    preview.className = "editor-preview-side markdown-body";
+    wrapper.parentNode.insertBefore(preview, wrapper.nextSibling);
+  }
 
-	// Syncs scroll	editor -> preview
-	var cScroll = false;
-	var pScroll = false;
-	cm.on("scroll", function(v) {
-		if(cScroll) {
-			cScroll = false;
-			return;
-		}
-		pScroll = true;
-		var height = v.getScrollInfo().height - v.getScrollInfo().clientHeight;
-		var ratio = parseFloat(v.getScrollInfo().top) / height;
-		var move = (preview.scrollHeight - preview.clientHeight) * ratio;
-		preview.scrollTop = move;
-	});
+  // Syncs scroll	editor -> preview
+  var cScroll = false;
+  var pScroll = false;
+  cm.on("scroll", function(v) {
+    if (cScroll) {
+      cScroll = false;
+      return;
+    }
+    pScroll = true;
+    var height = v.getScrollInfo().height - v.getScrollInfo().clientHeight;
+    var ratio = parseFloat(v.getScrollInfo().top) / height;
+    var move = (preview.scrollHeight - preview.clientHeight) * ratio;
+    preview.scrollTop = move;
+  });
 
-	// Syncs scroll	preview -> editor
-	preview.onscroll = function() {
-		if(pScroll) {
-			pScroll = false;
-			return;
-		}
-		cScroll = true;
-		var height = preview.scrollHeight - preview.clientHeight;
-		var ratio = parseFloat(preview.scrollTop) / height;
-		var move = (cm.getScrollInfo().height - cm.getScrollInfo().clientHeight) * ratio;
-		cm.scrollTo(0, move);
-	};
-	return true;
+  // Syncs scroll	preview -> editor
+  preview.onscroll = function() {
+    if (pScroll) {
+      pScroll = false;
+      return;
+    }
+    cScroll = true;
+    var height = preview.scrollHeight - preview.clientHeight;
+    var ratio = parseFloat(preview.scrollTop) / height;
+    var move = (cm.getScrollInfo().height - cm.getScrollInfo().clientHeight) * ratio;
+    cm.scrollTo(0, move);
+  };
+  return true;
 };
 
 SimpleMDE.prototype.createToolbar = function(items) {
-	items = items || this.options.toolbar;
+  items = items || this.options.toolbar;
 
-	if(!items || items.length === 0) {
-		return;
-	}
-	var i;
-	for(i = 0; i < items.length; i++) {
-		if(toolbarBuiltInButtons[items[i]] != undefined) {
-			items[i] = toolbarBuiltInButtons[items[i]];
-		}
-	}
+  if (!items || items.length === 0) {
+    return;
+  }
+  var i;
+  for (i = 0; i < items.length; i++) {
+    if (toolbarBuiltInButtons[items[i]] != undefined) {
+      items[i] = toolbarBuiltInButtons[items[i]];
+    }
+  }
 
-	var bar = document.createElement("div");
-	bar.className = "editor-toolbar";
+  var bar = document.createElement("div");
+  bar.className = "editor-toolbar";
 
-	var self = this;
+  var self = this;
 
-	var toolbar_data = {};
-	self.toolbar = items;
+  var toolbar_data = {};
+  self.toolbar = items;
 
-	for(i = 0; i < items.length; i++) {
-		if(items[i].name == "guide" && self.options.toolbarGuideIcon === false)
-			continue;
+  for (i = 0; i < items.length; i++) {
+    if (items[i].name == "guide" && self.options.toolbarGuideIcon === false)
+      continue;
 
-		if(self.options.hideIcons && self.options.hideIcons.indexOf(items[i].name) != -1)
-			continue;
+    if (self.options.hideIcons && self.options.hideIcons.indexOf(items[i].name) != -1)
+      continue;
 
-		// Fullscreen does not work well on mobile devices (even tablets)
-		// In the future, hopefully this can be resolved
-		if((items[i].name == "fullscreen" || items[i].name == "side-by-side") && isMobile())
-			continue;
+    // Fullscreen does not work well on mobile devices (even tablets)
+    // In the future, hopefully this can be resolved
+    if ((items[i].name == "fullscreen" || items[i].name == "side-by-side") && isMobile())
+      continue;
 
-		(function(item) {
-			var el;
-			if(item === "|") {
-				el = createSep();
-			} else {
-				el = createIcon(item, self.options.toolbarTips);
-			}
+    (function(item) {
+      var el;
+      if (item === "|") {
+        el = createSep();
+      } else {
+        el = createIcon(item, self.options.toolbarTips);
+      }
 
-			// bind events, special for info
-			if(item.action) {
-				if(typeof item.action === "function") {
-					el.onclick = function() {
-						item.action(self);
-					};
-				} else if(typeof item.action === "string") {
-					el.href = item.action;
-					el.target = "_blank";
-				}
-			}
-			toolbar_data[item.name || item] = el;
-			bar.appendChild(el);
-		})(items[i]);
-	}
+      // bind events, special for info
+      if (item.action) {
+        if (typeof item.action === "function") {
+          el.onclick = function() {
+            item.action(self);
+          };
+        } else if (typeof item.action === "string") {
+          el.href = item.action;
+          el.target = "_blank";
+        }
+      }
+      toolbar_data[item.name || item] = el;
+      bar.appendChild(el);
+    })(items[i]);
+  }
 
-	self.toolbarElements = toolbar_data;
+  self.toolbarElements = toolbar_data;
 
-	var cm = this.codemirror;
-	cm.on("cursorActivity", function() {
-		var stat = getState(cm);
+  var cm = this.codemirror;
+  cm.on("cursorActivity", function() {
+    var stat = getState(cm);
 
-		for(var key in toolbar_data) {
-			(function(key) {
-				var el = toolbar_data[key];
-				if(stat[key]) {
-					el.className += " active";
-				} else if(key != "fullscreen" && key != "side-by-side") {
-					el.className = el.className.replace(/\s*active\s*/g, "");
-				}
-			})(key);
-		}
-	});
+    for (var key in toolbar_data) {
+      (function(key) {
+        var el = toolbar_data[key];
+        if (stat[key]) {
+          el.className += " active";
+        } else if (key != "fullscreen" && key != "preview" && key != "side-by-side") {
+          el.className = el.className.replace(/\s*active\s*/g, "");
+        }
+      })(key);
+    }
+  });
 
-	this.element.parentNode.insertBefore(bar, this.container);
-	return bar;
+  this.element.parentNode.insertBefore(bar, this.container);
+  return bar;
 };
 
 SimpleMDE.prototype.createStatusbar = function(status) {
-	status = status || this.options.status;
-	var options = this.options;
+  status = status || this.options.status;
+  var options = this.options;
 
-	if(!status || status.length === 0) return;
+  if (!status || status.length === 0) return;
 
-	var bar = document.createElement("div");
-	bar.className = "editor-statusbar";
+  var bar = document.createElement("div");
+  bar.className = "editor-statusbar";
 
-	var pos, cm = this.codemirror;
-	for(var i = 0; i < status.length; i++) {
-		(function(name) {
-			var el = document.createElement("span");
-			el.className = name;
-			if(name === "words") {
-				el.innerHTML = "0";
-				cm.on("update", function() {
-					el.innerHTML = wordCount(cm.getValue());
-				});
-			} else if(name === "lines") {
-				el.innerHTML = "0";
-				cm.on("update", function() {
-					el.innerHTML = cm.lineCount();
-				});
-			} else if(name === "cursor") {
-				el.innerHTML = "0:0";
-				cm.on("cursorActivity", function() {
-					pos = cm.getCursor();
-					el.innerHTML = pos.line + ":" + pos.ch;
-				});
-			} else if(name === "autosave") {
-				if(options.autosave != undefined && options.autosave.enabled === true) {
-					el.setAttribute("id", "autosaved");
-				}
-			}
-			bar.appendChild(el);
-		})(status[i]);
-	}
+  var pos, cm = this.codemirror;
+  for (var i = 0; i < status.length; i++) {
+    (function(name) {
+      var el = document.createElement("span");
+      el.className = name;
+      if (name === "words") {
+        el.innerHTML = "0";
+        cm.on("update", function() {
+          el.innerHTML = wordCount(cm.getValue());
+        });
+      } else if (name === "lines") {
+        el.innerHTML = "0";
+        cm.on("update", function() {
+          el.innerHTML = cm.lineCount();
+        });
+      } else if (name === "cursor") {
+        el.innerHTML = "0:0";
+        cm.on("cursorActivity", function() {
+          pos = cm.getCursor();
+          el.innerHTML = pos.line + ":" + pos.ch;
+        });
+      } else if (name === "autosave") {
+        if (options.autosave != undefined && options.autosave.enabled === true) {
+          el.setAttribute("id", "autosaved");
+        }
+      }
+      bar.appendChild(el);
+    })(status[i]);
+  }
 
-	var cmWrapper = this.codemirror.getWrapperElement();
-	cmWrapper.parentNode.insertBefore(bar, cmWrapper.nextSibling);
-	return bar;
+  var cmWrapper = this.codemirror.getWrapperElement();
+  cmWrapper.parentNode.insertBefore(bar, cmWrapper.nextSibling);
+  return bar;
 };
 
 /**
- * Get or set the text content.
- */
+* Get or set the text content.
+*/
 SimpleMDE.prototype.value = function(val) {
-	if(val === undefined) {
-		return this.codemirror.getValue();
-	} else {
-		this.codemirror.getDoc().setValue(val);
-		return this;
-	}
+  if (val === undefined) {
+    return this.codemirror.getValue();
+  } else {
+    this.codemirror.getDoc().setValue(val);
+    return this;
+  }
 };
 
 
 /**
- * Bind static methods for exports.
- */
+* Bind static methods for exports.
+*/
 SimpleMDE.toggleBold = toggleBold;
 SimpleMDE.toggleItalic = toggleItalic;
 SimpleMDE.toggleStrikethrough = toggleStrikethrough;
@@ -62264,6 +62344,8 @@ SimpleMDE.drawHorizontalRule = drawHorizontalRule;
 SimpleMDE.undo = undo;
 SimpleMDE.redo = redo;
 SimpleMDE.togglePreview = togglePreview;
+SimpleMDE.showPreview = showPreview;
+SimpleMDE.hidePreview = hidePreview;
 SimpleMDE.toggleSideBySide = toggleSideBySide;
 SimpleMDE.toggleFullScreen = toggleFullScreen;
 
@@ -62271,108 +62353,114 @@ SimpleMDE.toggleFullScreen = toggleFullScreen;
  * Bind instance methods for exports.
  */
 SimpleMDE.prototype.toggleBold = function() {
-	toggleBold(this);
+  toggleBold(this);
 };
 SimpleMDE.prototype.toggleItalic = function() {
-	toggleItalic(this);
+  toggleItalic(this);
 };
 SimpleMDE.prototype.toggleStrikethrough = function() {
-	toggleStrikethrough(this);
+  toggleStrikethrough(this);
 };
 SimpleMDE.prototype.toggleBlockquote = function() {
-	toggleBlockquote(this);
+  toggleBlockquote(this);
 };
 SimpleMDE.prototype.toggleHeadingSmaller = function() {
-	toggleHeadingSmaller(this);
+  toggleHeadingSmaller(this);
 };
 SimpleMDE.prototype.toggleHeadingBigger = function() {
-	toggleHeadingBigger(this);
+  toggleHeadingBigger(this);
 };
 SimpleMDE.prototype.toggleHeading1 = function() {
-	toggleHeading1(this);
+  toggleHeading1(this);
 };
 SimpleMDE.prototype.toggleHeading2 = function() {
-	toggleHeading2(this);
+  toggleHeading2(this);
 };
 SimpleMDE.prototype.toggleHeading3 = function() {
-	toggleHeading3(this);
+  toggleHeading3(this);
 };
 SimpleMDE.prototype.toggleHeading4 = function() {
-	toggleHeading4(this);
+  toggleHeading4(this);
 };
 SimpleMDE.prototype.toggleCodeBlock = function() {
-	toggleCodeBlock(this);
+  toggleCodeBlock(this);
 };
 SimpleMDE.prototype.toggleUnorderedList = function() {
-	toggleUnorderedList(this);
+  toggleUnorderedList(this);
 };
 SimpleMDE.prototype.toggleOrderedList = function() {
-	toggleOrderedList(this);
+  toggleOrderedList(this);
 };
 SimpleMDE.prototype.drawLink = function() {
-	drawLink(this);
+  drawLink(this);
 };
 SimpleMDE.prototype.drawImage = function() {
-	drawImage(this);
+  drawImage(this);
 };
 SimpleMDE.prototype.drawHorizontalRule = function() {
-	drawHorizontalRule(this);
+  drawHorizontalRule(this);
 };
 SimpleMDE.prototype.undo = function() {
-	undo(this);
+  undo(this);
 };
 SimpleMDE.prototype.redo = function() {
-	redo(this);
+  redo(this);
 };
 SimpleMDE.prototype.togglePreview = function() {
-	togglePreview(this);
+  togglePreview(this);
+};
+SimpleMDE.prototype.showPreview = function() {
+  showPreview(this);
+};
+SimpleMDE.prototype.hidePreview = function() {
+  hidePreview(this);
 };
 SimpleMDE.prototype.toggleSideBySide = function() {
-	toggleSideBySide(this);
+  toggleSideBySide(this);
 };
 SimpleMDE.prototype.toggleFullScreen = function() {
-	toggleFullScreen(this);
+  toggleFullScreen(this);
 };
 
 SimpleMDE.prototype.isPreviewActive = function() {
-	var cm = this.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.lastChild;
+  var cm = this.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.lastChild;
 
-	return /editor-preview-active/.test(preview.className);
+  return /editor-preview-active/.test(preview.className);
 };
 
 SimpleMDE.prototype.isSideBySideActive = function() {
-	var cm = this.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.nextSibling;
+  var cm = this.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
 
-	return /editor-preview-active-side/.test(preview.className);
+  return /editor-preview-active-side/.test(preview.className);
 };
 
 SimpleMDE.prototype.isFullscreenActive = function() {
-	var cm = this.codemirror;
+  var cm = this.codemirror;
 
-	return cm.getOption("fullScreen");
+  return cm.getOption("fullScreen");
 };
 
 SimpleMDE.prototype.updatePreview = function() {
-	var cm = this.codemirror;
-	var wrapper = cm.getWrapperElement();
-	var preview = wrapper.nextSibling;
+  var cm = this.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
 
-	preview.innerHTML = this.options.previewRender(this.value(), preview);
-	this.emitter.emit("did-update-preview", this);
+  preview.innerHTML = this.options.previewRender(this.value(), preview);
+  this.emitter.emit("did-update-preview", this);
 };
 
 SimpleMDE.prototype.getPreview = function() {
-	var cm = this.codemirror;
-	var wrapper = cm.getWrapperElement();
-	return wrapper.nextSibling;
+  var cm = this.codemirror;
+  var wrapper = cm.getWrapperElement();
+  return wrapper.nextSibling;
 };
 
 SimpleMDE.prototype.onDidUpdatePreview = function(callback) {
-	return this.emitter.on("did-update-preview", callback);
+  return this.emitter.on("did-update-preview", callback);
 };
 
 module.exports = SimpleMDE;

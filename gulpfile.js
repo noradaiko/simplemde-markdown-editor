@@ -21,11 +21,13 @@ var banner = ["/**",
 	" */",
 	""].join("\n");
 
+  /*
 gulp.task("prettify-js", [], function() {
 	return gulp.src("./src/js/simplemde.js")
-		.pipe(prettify({js: {braceStyle: "collapse", indentChar: "\t", indentSize: 1, maxPreserveNewlines: 3, spaceBeforeConditional: false}}))
+		.pipe(prettify({js: {braceStyle: "collapse", indentChar: " ", indentSize: 2, maxPreserveNewlines: 3, spaceBeforeConditional: false}}))
 		.pipe(gulp.dest("./src/js"));
 });
+*/
  
 gulp.task("prettify-css", [], function() {
 	return gulp.src("./src/css/simplemde.css")
@@ -33,7 +35,7 @@ gulp.task("prettify-css", [], function() {
 		.pipe(gulp.dest("./src/css"));
 });
 
-gulp.task("lint", ["prettify-js"], function() {
+gulp.task("lint", [], function() {
 	gulp.src("./src/js/**/*.js")
 		.pipe(debug())
 		.pipe(eslint())
