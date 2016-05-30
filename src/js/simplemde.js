@@ -496,6 +496,7 @@ function hidePreview(editor) {
   toolbar_div.className = toolbar_div.className.replace(/\s*disabled-for-preview*/g, "");
 
   cm.refresh();
+  cm.focus();
 
   var move = (cm.getScrollInfo().height - cm.getScrollInfo().clientHeight) * ratio;
   cm.scrollTo(0, Math.max(0, move));
