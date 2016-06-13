@@ -371,33 +371,31 @@ function enableSideBySide(editor) {
     hidePreview(editor);
   }
 
-  _.defer(function() {
+  // When the preview button is clicked for the first time,
+  // give some time for the transition from editor.css to fire and the view to slide from right to left,
+  // instead of just appearing.
+  setTimeout(function() {
+    preview.className += " editor-preview-active-side";
+  }, 1);
+  toolbarButton.className += " active";
+  wrapper.className += " CodeMirror-sided";
 
-    // When the preview button is clicked for the first time,
-    // give some time for the transition from editor.css to fire and the view to slide from right to left,
-    // instead of just appearing.
-    setTimeout(function() {
-      preview.className += " editor-preview-active-side";
-    }, 1);
-    toolbarButton.className += " active";
-    wrapper.className += " CodeMirror-sided";
+  // Start preview with the current text
+  //preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+  editor.updatePreview();
 
-    // Start preview with the current text
+  // Updates preview
+  editor._updatePreview = _.throttle(function() {
     //preview.innerHTML = editor.options.previewRender(editor.value(), preview);
     editor.updatePreview();
-
-    // Updates preview
-    editor._updatePreview = _.throttle(function() {
-      //preview.innerHTML = editor.options.previewRender(editor.value(), preview);
-      editor.updatePreview();
-    }, 1000);
-    cm.on("update", editor._updatePreview);
-    _.defer(function() {
-      cm.refresh();
-      cm = null;
-    });
-
+  }, 1000);
+  cm.on("update", editor._updatePreview);
+  _.defer(function() {
+    cm.refresh();
+    cm = null;
   });
+
+  editor.emitter.emit("did-sidebyside-toggle", { editor: editor, visible: true });
 }
 
 function disableSideBySide(editor) {
@@ -416,6 +414,8 @@ function disableSideBySide(editor) {
   cm.off("update", editor._updatePreview);
   cm.refresh();
   editor._updatePreview = undefined;
+
+  editor.emitter.emit("did-sidebyside-toggle", { editor: editor, visible: false });
 }
 
 
@@ -445,6 +445,10 @@ function showPreview(editor) {
   var toolbar = editor.toolbarElements.preview;
   var preview = wrapper.nextSibling;
 
+  if (isPreviewShown(editor)) {
+    return;
+  }
+
   // calc scroll position of editor
   var height = cm.getScrollInfo().height - cm.getScrollInfo().clientHeight;
   var ratio = parseFloat(cm.getScrollInfo().top) / height;
@@ -473,6 +477,7 @@ function showPreview(editor) {
     toggleSideBySide(editor);
   }
   //});
+  editor.emitter.emit("did-preview-toggle", { editor: editor, visible: true });
 }
 
 function hidePreview(editor) {
@@ -481,6 +486,10 @@ function hidePreview(editor) {
   var toolbar_div = editor.container.previousSibling;
   var toolbar = editor.toolbarElements.preview;
   var preview = wrapper.nextSibling;
+
+  if (!isPreviewShown(editor)) {
+    return;
+  }
 
   // calc scroll position of preview
   var height = preview.scrollHeight - preview.clientHeight;
@@ -497,9 +506,14 @@ function hidePreview(editor) {
 
   cm.refresh();
   cm.focus();
+  _.defer(function () {
+    cm.refresh();
+  });
 
   var move = (cm.getScrollInfo().height - cm.getScrollInfo().clientHeight) * ratio;
   cm.scrollTo(0, Math.max(0, move));
+
+  editor.emitter.emit("did-preview-toggle", { editor: editor, visible: false });
 }
 
 
@@ -1449,6 +1463,13 @@ SimpleMDE.prototype.hidePreview = function() {
 SimpleMDE.prototype.toggleSideBySide = function() {
   toggleSideBySide(this);
 };
+SimpleMDE.prototype.enableSideBySide = function() {
+  enableSideBySide(this);
+};
+SimpleMDE.prototype.disableSideBySide = function() {
+  disableSideBySide(this);
+};
+
 SimpleMDE.prototype.toggleFullScreen = function() {
   toggleFullScreen(this);
 };
@@ -1492,6 +1513,14 @@ SimpleMDE.prototype.getPreview = function() {
 
 SimpleMDE.prototype.onDidUpdatePreview = function(callback) {
   return this.emitter.on("did-update-preview", callback);
+};
+
+SimpleMDE.prototype.onDidPreviewToggle = function(callback) {
+  return this.emitter.on("did-preview-toggle", callback);
+};
+
+SimpleMDE.prototype.onDidSideBySideToggle = function(callback) {
+  return this.emitter.on("did-sidebyside-toggle", callback);
 };
 
 module.exports = SimpleMDE;
