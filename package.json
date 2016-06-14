@@ -23,7 +23,7 @@
   "dependencies": {
     "codemirror": "codemirror/codemirror",
     "event-kit": "^2.0.0",
-    "highlight.js": "^8.9.1",
+    "highlight.js": "^9.4.0",
     "markdown-it": "^5.0.2",
     "underscore": "^1.8.3"
   },
