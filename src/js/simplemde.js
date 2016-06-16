@@ -355,9 +355,8 @@ function toggleSideBySide(editor) {
 function isSideBySideEnabled(editor) {
   var cm = editor.codemirror;
   var wrapper = cm.getWrapperElement();
-  var preview = wrapper.nextSibling;
 
-  return /editor-preview-active-side/.test(preview.className);
+  return /CodeMirror-sided/.test(wrapper.className);
 }
 
 function enableSideBySide(editor) {
@@ -365,6 +364,10 @@ function enableSideBySide(editor) {
   var wrapper = cm.getWrapperElement();
   var preview = wrapper.nextSibling;
   var toolbarButton = editor.toolbarElements["side-by-side"] || {};
+
+  if (isSideBySideEnabled(editor)) {
+    return;
+  }
 
   // Hide normal preview if active
   if (isPreviewShown(editor)) {
@@ -374,9 +377,9 @@ function enableSideBySide(editor) {
   // When the preview button is clicked for the first time,
   // give some time for the transition from editor.css to fire and the view to slide from right to left,
   // instead of just appearing.
-  setTimeout(function() {
+  _.defer(function() {
     preview.className += " editor-preview-active-side";
-  }, 1);
+  });
   toolbarButton.className += " active";
   wrapper.className += " CodeMirror-sided";
 
@@ -389,7 +392,8 @@ function enableSideBySide(editor) {
     //preview.innerHTML = editor.options.previewRender(editor.value(), preview);
     editor.updatePreview();
   }, 1000);
-  cm.on("update", editor._updatePreview);
+  cm.on("change", editor._updatePreview);
+
   _.defer(function() {
     cm.refresh();
     cm = null;
@@ -404,6 +408,10 @@ function disableSideBySide(editor) {
   var preview = wrapper.nextSibling;
   var toolbarButton = editor.toolbarElements["side-by-side"] || {};
 
+  if (!isSideBySideEnabled(editor)) {
+    return;
+  }
+
   preview.className = preview.className.replace(
     /\s*editor-preview-active-side\s*/g, ""
   );
@@ -411,7 +419,7 @@ function disableSideBySide(editor) {
   wrapper.className = wrapper.className.replace(/\s*CodeMirror-sided\s*/g, " ");
 
   // Updates preview
-  cm.off("update", editor._updatePreview);
+  cm.off("change", editor._updatePreview);
   cm.refresh();
   editor._updatePreview = undefined;
 
@@ -1011,10 +1019,11 @@ function SimpleMDE(options) {
     breaks: options.renderingConfig && options.renderingConfig.singleLineBreaks,
     highlight: function(code, lang) {
       try {
-        if (lang && hljs.getLanguage(lang)) {
+        if (lang/* && hljs.getLanguage(lang)*/) {
           return hljs.highlight(lang, code).value;
         }
-        return hljs.highlightAuto(code).value;
+        return "";
+        // return hljs.highlightAuto(code).value;
       } catch (__) {
         return ""; // use external default escaping
       }
