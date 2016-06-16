@@ -6,7 +6,7 @@
  */
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.SimpleMDE = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 (function (global){
-/*! https://mths.be/punycode v1.4.1 by @mathias */
+/*! https://mths.be/punycode v1.3.2 by @mathias */
 ;(function(root) {
 
 	/** Detect free variables */
@@ -72,7 +72,7 @@
 	 * @returns {Error} Throws a `RangeError` with the applicable error message.
 	 */
 	function error(type) {
-		throw new RangeError(errors[type]);
+		throw RangeError(errors[type]);
 	}
 
 	/**
@@ -219,7 +219,7 @@
 
 	/**
 	 * Bias adaptation function as per section 3.4 of RFC 3492.
-	 * https://tools.ietf.org/html/rfc3492#section-3.4
+	 * http://tools.ietf.org/html/rfc3492#section-3.4
 	 * @private
 	 */
 	function adapt(delta, numPoints, firstTime) {
@@ -494,7 +494,7 @@
 		 * @memberOf punycode
 		 * @type String
 		 */
-		'version': '1.4.1',
+		'version': '1.3.2',
 		/**
 		 * An object of methods to convert from JavaScript's internal character
 		 * representation (UCS-2) to Unicode code points, and back.
@@ -524,17 +524,14 @@
 			return punycode;
 		});
 	} else if (freeExports && freeModule) {
-		if (module.exports == freeExports) {
-			// in Node.js, io.js, or RingoJS v0.8.0+
+		if (module.exports == freeExports) { // in Node.js or RingoJS v0.8.0+
 			freeModule.exports = punycode;
-		} else {
-			// in Narwhal or RingoJS v0.7.0-
+		} else { // in Narwhal or RingoJS v0.7.0-
 			for (key in punycode) {
 				punycode.hasOwnProperty(key) && (freeExports[key] = punycode[key]);
 			}
 		}
-	} else {
-		// in Rhino or a web browser
+	} else { // in Rhino or a web browser
 		root.punycode = punycode;
 	}
 
@@ -1347,12 +1344,13 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     return cm.getSearchCursor(query, pos, queryCaseInsensitive(query));
   }
 
-  function persistentDialog(cm, text, deflt, f) {
-    cm.openDialog(text, f, {
+  function persistentDialog(cm, text, deflt, onEnter, onKeyDown) {
+    cm.openDialog(text, onEnter, {
       value: deflt,
       selectValueOnOpen: true,
       closeOnEnter: false,
-      onClose: function() { clearSearch(cm); }
+      onClose: function() { clearSearch(cm); },
+      onKeyDown: onKeyDown
     });
   }
 
@@ -1402,13 +1400,13 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     }
   }
 
-  function doSearch(cm, rev, persistent) {
+  function doSearch(cm, rev, persistent, immediate) {
     var state = getSearchState(cm);
     if (state.query) return findNext(cm, rev);
     var q = cm.getSelection() || state.lastQuery;
     if (persistent && cm.openDialog) {
       var hiding = null
-      persistentDialog(cm, queryDialog, q, function(query, event) {
+      var searchNext = function(query, event) {
         CodeMirror.e_stop(event);
         if (!query) return;
         if (query != state.queryText) {
@@ -1423,7 +1421,22 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
               dialog.getBoundingClientRect().bottom - 4 > cm.cursorCoords(to, "window").top)
             (hiding = dialog).style.opacity = .4
         })
+      };
+      persistentDialog(cm, queryDialog, q, searchNext, function(event, query) {
+        var cmd = CodeMirror.keyMap[cm.getOption("keyMap")][CodeMirror.keyName(event)];
+        if (cmd == "findNext" || cmd == "findPrev") {
+          CodeMirror.e_stop(event);
+          startSearch(cm, getSearchState(cm), query);
+          cm.execCommand(cmd);
+        } else if (cmd == "find" || cmd == "findPersistent") {
+          CodeMirror.e_stop(event);
+          searchNext(query, event);
+        }
       });
+      if (immediate) {
+        startSearch(cm, state, q);
+        findNext(cm, rev);
+      }
     } else {
       dialog(cm, queryDialog, "Search for:", q, function(query) {
         if (query && !state.query) cm.operation(function() {
@@ -1513,6 +1526,8 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
 
   CodeMirror.commands.find = function(cm) {clearSearch(cm); doSearch(cm);};
   CodeMirror.commands.findPersistent = function(cm) {clearSearch(cm); doSearch(cm, false, true);};
+  CodeMirror.commands.findPersistentNext = function(cm) {doSearch(cm, false, true, true);};
+  CodeMirror.commands.findPersistentPrev = function(cm) {doSearch(cm, true, true, true);};
   CodeMirror.commands.findNext = doSearch;
   CodeMirror.commands.findPrev = function(cm) {doSearch(cm, true);};
   CodeMirror.commands.clearSearch = clearSearch;
@@ -2821,11 +2836,10 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     if (!sel) sel = doc.sel;
 
     var paste = cm.state.pasteIncoming || origin == "paste";
-    var textLines = doc.splitLines(inserted), multiPaste = null, lineWisePaste = false;
+    var textLines = doc.splitLines(inserted), multiPaste = null
     // When pasing N lines into N selections, insert one line per selection
     if (paste && sel.ranges.length > 1) {
       if (lastCopied && lastCopied.text.join("\n") == inserted) {
-        lineWisePaste = lastCopied.lineWise
         if (sel.ranges.length % lastCopied.text.length == 0) {
           multiPaste = [];
           for (var i = 0; i < lastCopied.text.length; i++)
@@ -2845,7 +2859,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
           from = Pos(from.line, from.ch - deleted);
         else if (cm.state.overwrite && !paste) // Handle overwrite
           to = Pos(to.line, Math.min(getLine(doc, to.line).text.length, to.ch + lst(textLines).length));
-        else if (lineWisePaste)
+        else if (lastCopied && lastCopied.lineWise && lastCopied.text.join("\n") == inserted)
           from = to = Pos(from.line, 0)
       }
       var updateInput = cm.curOp.updateInput;
@@ -5375,6 +5389,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     // Let the drag handler handle this.
     if (webkit) display.scroller.draggable = true;
     cm.state.draggingText = dragEnd;
+    dragEnd.copy = mac ? e.altKey : e.ctrlKey
     // IE's approach to draggable
     if (display.scroller.dragDrop) display.scroller.dragDrop();
     on(document, "mouseup", dragEnd);
@@ -5605,7 +5620,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
       try {
         var text = e.dataTransfer.getData("Text");
         if (text) {
-          if (cm.state.draggingText && !(mac ? e.altKey : e.ctrlKey))
+          if (cm.state.draggingText && !cm.state.draggingText.copy)
             var selected = cm.listSelections();
           setSelectionNoUndo(cm.doc, simpleSelection(pos, pos));
           if (selected) for (var i = 0; i < selected.length; ++i)
@@ -9057,31 +9072,25 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
     },
     // When a node has grown, check whether it should be split.
     maybeSpill: function() {
+      if (this.children.length <= 10) return;
       var me = this;
-      var children = me.children;
-      var numChildren = children.length;
-      if (numChildren <= 10) return;
-      // To avoid memory thrashing when the children array is huge (e.g. first view of a large file), it's never spliced.
-      // Instead, small slices are taken. They're taken in order because sequential memory accesses are fastest.
-      var parent = me.parent || me;
-      var numMoreBranches = Math.ceil((numChildren - 10) / 5);
-      var firstBranchNumChildren = numChildren - numMoreBranches * 5;
-      var firstBranch = new BranchChunk(children.slice(0, firstBranchNumChildren));
-      var branches = [firstBranch];
-      firstBranch.parent = parent;
-      for (var i = 0; i < numMoreBranches; i++) {
-        var branchStart = firstBranchNumChildren + i * 5;
-        var branch = new BranchChunk(children.slice(branchStart, branchStart + 5));
-        branches.push(branch);
-        branch.parent = parent;
-      }
-      if (parent === me) {
-        parent.children = branches;
-      } else {
-        var myIndex = indexOf(parent.children, me);
-        parent.children.splice(myIndex, 1, branches);
-      }
-      parent.maybeSpill();
+      do {
+        var spilled = me.children.splice(me.children.length - 5, 5);
+        var sibling = new BranchChunk(spilled);
+        if (!me.parent) { // Become the parent node
+          var copy = new BranchChunk(me.children);
+          copy.parent = me;
+          me.children = [copy, sibling];
+          me = copy;
+       } else {
+          me.size -= sibling.size;
+          me.height -= sibling.height;
+          var myIndex = indexOf(me.parent.children, me);
+          me.parent.children.splice(myIndex + 1, 0, sibling);
+        }
+        sibling.parent = me.parent;
+      } while (me.children.length > 10);
+      me.parent.maybeSpill();
     },
     iterN: function(at, n, op) {
       for (var i = 0; i < this.children.length; ++i) {
@@ -10623,7 +10632,7 @@ CodeMirror.overlayMode = function(base, overlay, combine) {
 
   // THE END
 
-  CodeMirror.version = "5.14.3";
+  CodeMirror.version = "5.15.3";
 
   return CodeMirror;
 });
@@ -11806,6 +11815,7 @@ CodeMirror.defineMode("clike", function(config, parserConfig) {
     typeFirstDefinitions: true,
     atoms: words("true false null"),
     endStatement: /^[;:]$/,
+    number: /^(?:0x[a-f\d_]+|0b[01_]+|(?:[\d_]+\.?\d*|\.\d+)(?:e[-+]?[\d_]+)?)(u|ll?|l|f)?/i,
     hooks: {
       "@": function(stream) {
         stream.eatWhile(/[\w\$_]/);
@@ -21253,17 +21263,17 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
     if (type == "(") return pass(functiondef);
   }
   function commasep(what, end) {
-    function proceed(type) {
+    function proceed(type, value) {
       if (type == ",") {
         var lex = cx.state.lexical;
         if (lex.info == "call") lex.pos = (lex.pos || 0) + 1;
         return cont(what, proceed);
       }
-      if (type == end) return cont();
+      if (type == end || value == end) return cont();
       return cont(expect(end));
     }
-    return function(type) {
-      if (type == end) return cont();
+    return function(type, value) {
+      if (type == end || value == end) return cont();
       return pass(what, proceed);
     };
   }
@@ -21277,13 +21287,17 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
     return pass(statement, block);
   }
   function maybetype(type) {
-    if (isTS && type == ":") return cont(typedef);
+    if (isTS && type == ":") return cont(typeexpr);
   }
   function maybedefault(_, value) {
     if (value == "=") return cont(expressionNoComma);
   }
-  function typedef(type) {
-    if (type == "variable") {cx.marked = "variable-3"; return cont();}
+  function typeexpr(type) {
+    if (type == "variable") {cx.marked = "variable-3"; return cont(afterType);}
+  }
+  function afterType(type, value) {
+    if (value == "<") return cont(commasep(typeexpr, ">"), afterType)
+    if (type == "[") return cont(expect("]"), afterType)
   }
   function vardef() {
     return pass(pattern, maybetype, maybeAssign, vardefCont);
@@ -21338,7 +21352,7 @@ CodeMirror.defineMode("javascript", function(config, parserConfig) {
   function functiondef(type, value) {
     if (value == "*") {cx.marked = "keyword"; return cont(functiondef);}
     if (type == "variable") {register(value); return cont(functiondef);}
-    if (type == "(") return cont(pushcontext, pushlex(")"), commasep(funarg, ")"), poplex, statement, popcontext);
+    if (type == "(") return cont(pushcontext, pushlex(")"), commasep(funarg, ")"), poplex, maybetype, statement, popcontext);
   }
   function funarg(type) {
     if (type == "spread") return cont(funarg);
@@ -31170,10 +31184,11 @@ CodeMirror.defineMIME("text/x-solr", "solr");
             return tokenUntil(stream, state, /\{\/literal}/);
 
           case "string":
-            if (stream.match(/^.*?"/)) {
-              state.soyState.pop();
-            } else {
+            var match = stream.match(/^.*?("|\\[\s\S])/);
+            if (!match) {
               stream.skipToEnd();
+            } else if (match[1] == "\"") {
+              state.soyState.pop();
             }
             return "string";
         }
@@ -31911,9 +31926,9 @@ CodeMirror.defineMode("sql", function(config, parserConfig) {
     // http://www.postgresql.org/docs/9.5/static/datatype.html
     builtin: set("bigint int8 bigserial serial8 bit varying varbit boolean bool box bytea character char varchar cidr circle date double precision float8 inet integer int int4 interval json jsonb line lseg macaddr money numeric decimal path pg_lsn point polygon real float4 smallint int2 smallserial serial2 serial serial4 text time without zone with timetz timestamp timestamptz tsquery tsvector txid_snapshot uuid xml"),
     atoms: set("false true null unknown"),
-    operatorChars: /^[*+\-%<>!=&|^]/,
+    operatorChars: /^[*+\-%<>!=&|^\/#@?~]/,
     dateSQL: set("date time timestamp"),
-    support: set("ODBCdotTable decimallessFloat zerolessFloat binaryNumber hexNumber nCharCast charsetCast commentHash commentSpaceRequired")
+    support: set("ODBCdotTable decimallessFloat zerolessFloat binaryNumber hexNumber nCharCast charsetCast")
   });
 
   // Google's SQL-like query language, GQL
@@ -53058,7 +53073,8 @@ function normalizeLinkText(url) {
  *   `['«\xA0', '\xA0»', '‹\xA0', '\xA0›']` for French (including nbsp).
  * - __highlight__ - `null`. Highlighter function for fenced code blocks.
  *   Highlighter `function (str, lang)` should return escaped HTML. It can also
- *   return empty string if the source was not changed and should be escaped externaly.
+ *   return empty string if the source was not changed and should be escaped
+ *   externaly. If result starts with <pre... internal wrapper is skipped.
  *
  * ##### Example
  *
@@ -53090,14 +53106,32 @@ function normalizeLinkText(url) {
  *       } catch (__) {}
  *     }
  *
- *     try {
- *       return hljs.highlightAuto(str).value;
- *     } catch (__) {}
- *
  *     return ''; // use external default escaping
  *   }
  * });
  * ```
+ *
+ * Or with full wrapper override (if you need assign class to <pre>):
+ *
+ * ```javascript
+ * var hljs = require('highlight.js') // https://highlightjs.org/
+ *
+ * // Actual default values
+ * var md = require('markdown-it')({
+ *   highlight: function (str, lang) {
+ *     if (lang && hljs.getLanguage(lang)) {
+ *       try {
+ *         return '<pre class="hljs"><code>' +
+ *                hljs.highlight(lang, str).value +
+ *                '</code></pre>';
+ *       } catch (__) {}
+ *     }
+ *
+ *     return '<pre class="hljs"><code>' + md.utils.esccapeHtml(str) + '</code></pre>';
+ *   }
+ * });
+ * ```
+ *
  **/
 function MarkdownIt(presetName, options) {
   if (!(this instanceof MarkdownIt)) {
@@ -53831,7 +53865,8 @@ module.exports = {
     quotes: '\u201c\u201d\u2018\u2019', /* “”‘’ */
 
     // Highlighter function. Should return escaped HTML,
-    // or '' if input not changed
+    // or '' if the source string is not changed and should be escaped externaly.
+    // If result starts with <pre... internal wrapper is skipped.
     //
     // function (/*str, lang*/) { return ''; }
     //
@@ -53912,7 +53947,8 @@ module.exports = {
     quotes: '\u201c\u201d\u2018\u2019', /* “”‘’ */
 
     // Highlighter function. Should return escaped HTML,
-    // or '' if input not changed
+    // or '' if the source string is not changed and should be escaped externaly.
+    // If result starts with <pre... internal wrapper is skipped.
     //
     // function (/*str, lang*/) { return ''; }
     //
@@ -53955,7 +53991,8 @@ module.exports = {
     quotes: '\u201c\u201d\u2018\u2019', /* “”‘’ */
 
     // Highlighter function. Should return escaped HTML,
-    // or '' if input not changed
+    // or '' if the source string is not changed and should be escaped externaly.
+    // If result starts with <pre... internal wrapper is skipped.
     //
     // function (/*str, lang*/) { return ''; }
     //
@@ -54031,13 +54068,17 @@ default_rules.fence = function (tokens, idx, options, env, slf) {
 
   if (info) {
     langName = info.split(/\s+/g)[0];
-    token.attrPush([ 'class', options.langPrefix + langName ]);
+    token.attrJoin('class', options.langPrefix + langName);
   }
 
   if (options.highlight) {
     highlighted = options.highlight(token.content, langName) || escapeHtml(token.content);
   } else {
     highlighted = escapeHtml(token.content);
+  }
+
+  if (highlighted.indexOf('<pre') === 0) {
+    return highlighted + '\n';
   }
 
   return  '<pre><code' + slf.renderAttrs(token) + '>'
@@ -55985,7 +56026,7 @@ function escapedSplit(str) {
 
 
 module.exports = function table(state, startLine, endLine, silent) {
-  var ch, lineText, pos, i, nextLine, rows, token,
+  var ch, lineText, pos, i, nextLine, columns, columnCount, token,
       aligns, t, tableLines, tbodyLines;
 
   // should have at least three lines
@@ -56006,15 +56047,14 @@ module.exports = function table(state, startLine, endLine, silent) {
   lineText = getLine(state, startLine + 1);
   if (!/^[-:| ]+$/.test(lineText)) { return false; }
 
-  rows = lineText.split('|');
-  if (rows.length < 2) { return false; }
+  columns = lineText.split('|');
   aligns = [];
-  for (i = 0; i < rows.length; i++) {
-    t = rows[i].trim();
+  for (i = 0; i < columns.length; i++) {
+    t = columns[i].trim();
     if (!t) {
       // allow empty columns before and after table, but not in between columns;
       // e.g. allow ` |---| `, disallow ` ---||--- `
-      if (i === 0 || i === rows.length - 1) {
+      if (i === 0 || i === columns.length - 1) {
         continue;
       } else {
         return false;
@@ -56033,8 +56073,13 @@ module.exports = function table(state, startLine, endLine, silent) {
 
   lineText = getLine(state, startLine).trim();
   if (lineText.indexOf('|') === -1) { return false; }
-  rows = escapedSplit(lineText.replace(/^\||\|$/g, ''));
-  if (aligns.length !== rows.length) { return false; }
+  columns = escapedSplit(lineText.replace(/^\||\|$/g, ''));
+
+  // header row will define an amount of columns in the entire table,
+  // and align row shouldn't be smaller than that (the rest of the rows can)
+  columnCount = columns.length;
+  if (columnCount > aligns.length) { return false; }
+
   if (silent) { return true; }
 
   token     = state.push('table_open', 'table', 1);
@@ -56046,7 +56091,7 @@ module.exports = function table(state, startLine, endLine, silent) {
   token     = state.push('tr_open', 'tr', 1);
   token.map = [ startLine, startLine + 1 ];
 
-  for (i = 0; i < rows.length; i++) {
+  for (i = 0; i < columns.length; i++) {
     token          = state.push('th_open', 'th', 1);
     token.map      = [ startLine, startLine + 1 ];
     if (aligns[i]) {
@@ -56054,7 +56099,7 @@ module.exports = function table(state, startLine, endLine, silent) {
     }
 
     token          = state.push('inline', '', 0);
-    token.content  = rows[i].trim();
+    token.content  = columns[i].trim();
     token.map      = [ startLine, startLine + 1 ];
     token.children = [];
 
@@ -56072,20 +56117,17 @@ module.exports = function table(state, startLine, endLine, silent) {
 
     lineText = getLine(state, nextLine).trim();
     if (lineText.indexOf('|') === -1) { break; }
-    rows = escapedSplit(lineText.replace(/^\||\|$/g, ''));
-
-    // set number of columns to number of columns in header row
-    rows.length = aligns.length;
+    columns = escapedSplit(lineText.replace(/^\||\|$/g, ''));
 
     token = state.push('tr_open', 'tr', 1);
-    for (i = 0; i < rows.length; i++) {
+    for (i = 0; i < columnCount; i++) {
       token          = state.push('td_open', 'td', 1);
       if (aligns[i]) {
         token.attrs  = [ [ 'style', 'text-align:' + aligns[i] ] ];
       }
 
       token          = state.push('inline', '', 0);
-      token.content  = rows[i] ? rows[i].trim() : '';
+      token.content  = columns[i] ? columns[i].trim() : '';
       token.children = [];
 
       token          = state.push('td_close', 'td', -1);
@@ -56434,9 +56476,37 @@ function process_inlines(tokens, state) {
       pos = t.index + 1;
       isSingle = (t[0] === "'");
 
-      // treat begin/end of the line as a whitespace
-      lastChar = t.index - 1 >= 0 ? text.charCodeAt(t.index - 1) : 0x20;
-      nextChar = pos < max ? text.charCodeAt(pos) : 0x20;
+      // Find previous character,
+      // default to space if it's the beginning of the line
+      //
+      lastChar = 0x20;
+
+      if (t.index - 1 >= 0) {
+        lastChar = text.charCodeAt(t.index - 1);
+      } else {
+        for (j = i - 1; j >= 0; j--) {
+          if (tokens[j].type !== 'text') { continue; }
+
+          lastChar = tokens[j].content.charCodeAt(tokens[j].content.length - 1);
+          break;
+        }
+      }
+
+      // Find next character,
+      // default to space if it's the end of the line
+      //
+      nextChar = 0x20;
+
+      if (pos < max) {
+        nextChar = text.charCodeAt(pos);
+      } else {
+        for (j = i + 1; j < tokens.length; j++) {
+          if (tokens[j].type !== 'text') { continue; }
+
+          nextChar = tokens[j].content.charCodeAt(0);
+          break;
+        }
+      }
 
       isLastPunctChar = isMdAsciiPunct(lastChar) || isPunctChar(String.fromCharCode(lastChar));
       isNextPunctChar = isMdAsciiPunct(nextChar) || isPunctChar(String.fromCharCode(nextChar));
@@ -57024,6 +57094,7 @@ var isSpace              = require('../common/utils').isSpace;
 module.exports = function image(state, silent) {
   var attrs,
       code,
+      content,
       label,
       labelEnd,
       labelStart,
@@ -57148,8 +57219,10 @@ module.exports = function image(state, silent) {
   // so all that's left to do is to call tokenizer.
   //
   if (!silent) {
+    content = state.src.slice(labelStart, labelEnd);
+
     state.md.inline.parse(
-      state.src.slice(labelStart, labelEnd),
+      content,
       state.md,
       state.env,
       tokens = []
@@ -57158,6 +57231,8 @@ module.exports = function image(state, silent) {
     token          = state.push('image', 'img', 0);
     token.attrs    = attrs = [ [ 'src', href ], [ 'alt', '' ] ];
     token.children = tokens;
+    token.content  = content;
+
     if (title) {
       attrs.push([ 'title', title ]);
     }
@@ -57891,6 +57966,40 @@ Token.prototype.attrPush = function attrPush(attrData) {
 };
 
 
+/**
+ * Token.attrSet(name, value)
+ *
+ * Set `name` attribute to `value`. Override old value if exists.
+ **/
+Token.prototype.attrSet = function attrSet(name, value) {
+  var idx = this.attrIndex(name),
+      attrData = [ name, value ];
+
+  if (idx < 0) {
+    this.attrPush(attrData);
+  } else {
+    this.attrs[idx] = attrData;
+  }
+};
+
+
+/**
+ * Token.attrJoin(name, value)
+ *
+ * Join value to existing attribute via space. Or create new attribute if not
+ * exists. Useful to operate with token classes.
+ **/
+Token.prototype.attrJoin = function attrJoin(name, value) {
+  var idx = this.attrIndex(name);
+
+  if (idx < 0) {
+    this.attrPush([ name, value ]);
+  } else {
+    this.attrs[idx][1] = this.attrs[idx][1] + ' ' + value;
+  }
+};
+
+
 module.exports = Token;
 
 },{}],318:[function(require,module,exports){
@@ -57925,7 +58034,7 @@ function isRegExp(obj) { return _class(obj) === '[object RegExp]'; }
 function isFunction(obj) { return _class(obj) === '[object Function]'; }
 
 
-function escapeRE (str) { return str.replace(/[.?*+^$[\]\\(){}|-]/g, '\\$&'); }
+function escapeRE(str) { return str.replace(/[.?*+^$[\]\\(){}|-]/g, '\\$&'); }
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -57968,15 +58077,25 @@ var defaultSchemas = {
       var tail = text.slice(pos);
 
       if (!self.re.no_http) {
-      // compile lazily, becayse "host"-containing variables can change on tlds update.
+      // compile lazily, because "host"-containing variables can change on tlds update.
         self.re.no_http =  new RegExp(
-          '^' + self.re.src_auth + self.re.src_host_port_strict + self.re.src_path, 'i'
+          '^' +
+          self.re.src_auth +
+          // Don't allow single-level domains, because of false positives like '//test'
+          // with code comments
+          '(?:localhost|(?:(?:' + self.re.src_domain + ')\\.)+' + self.re.src_domain_root + ')' +
+          self.re.src_port +
+          self.re.src_host_terminator +
+          self.re.src_path,
+
+          'i'
         );
       }
 
       if (self.re.no_http.test(tail)) {
-        // should not be `://`, that protects from errors in protocol name
+        // should not be `://` & `///`, that protects from errors in protocol name
         if (pos >= 3 && text[pos - 3] === ':') { return 0; }
+        if (pos >= 3 && text[pos - 3] === '/') { return 0; }
         return tail.match(self.re.no_http)[0].length;
       }
       return 0;
@@ -58133,15 +58252,15 @@ function compile(self) {
   // Build schema condition
   //
   var slist = Object.keys(self.__compiled__)
-                      .filter(function(name) {
+                      .filter(function (name) {
                         // Filter disabled & fake schemas
                         return name.length > 0 && self.__compiled__[name];
                       })
                       .map(escapeRE)
                       .join('|');
   // (?!_) cause 1.5x slowdown
-  self.re.schema_test   = RegExp('(^|(?!_)(?:>|' + re.src_ZPCc + '))(' + slist + ')', 'i');
-  self.re.schema_search = RegExp('(^|(?!_)(?:>|' + re.src_ZPCc + '))(' + slist + ')', 'ig');
+  self.re.schema_test   = RegExp('(^|(?!_)(?:[><]|' + re.src_ZPCc + '))(' + slist + ')', 'i');
+  self.re.schema_search = RegExp('(^|(?!_)(?:[><]|' + re.src_ZPCc + '))(' + slist + ')', 'ig');
 
   self.re.pretest       = RegExp(
                             '(' + self.re.schema_test.source + ')|' +
@@ -58417,7 +58536,7 @@ LinkifyIt.prototype.testSchemaAt = function testSchemaAt(text, schema, pos) {
  * LinkifyIt#match(text) -> Array|null
  *
  * Returns array of found link descriptions or `null` on fail. We strongly
- * to use [[LinkifyIt#test]] first, for best speed.
+ * recommend to use [[LinkifyIt#test]] first, for best speed.
  *
  * ##### Result match description
  *
@@ -58484,7 +58603,7 @@ LinkifyIt.prototype.tlds = function tlds(list, keepOld) {
 
   this.__tlds__ = this.__tlds__.concat(list)
                                   .sort()
-                                  .filter(function(el, idx, arr) {
+                                  .filter(function (el, idx, arr) {
                                     return el !== arr[idx - 1];
                                   })
                                   .reverse();
@@ -58531,9 +58650,9 @@ var src_ZCc = exports.src_ZCc = [ src_Z, src_Cc ].join('|');
 // All possible word characters (everything without punctuation, spaces & controls)
 // Defined via punctuation & spaces to save space
 // Should be something like \p{\L\N\S\M} (\w but without `_`)
-var src_pseudo_letter       = '(?:(?!' + src_ZPCc + ')' + src_Any + ')';
+var src_pseudo_letter       = '(?:(?!>|<|' + src_ZPCc + ')' + src_Any + ')';
 // The same as abothe but without [0-9]
-var src_pseudo_letter_non_d = '(?:(?![0-9]|' + src_ZPCc + ')' + src_Any + ')';
+// var src_pseudo_letter_non_d = '(?:(?![0-9]|' + src_ZPCc + ')' + src_Any + ')';
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -58541,7 +58660,8 @@ var src_ip4 = exports.src_ip4 =
 
   '(?:(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)';
 
-exports.src_auth    = '(?:(?:(?!' + src_ZCc + ').)+@)?';
+// Prohibit [@/] in user/pass to avoid wrong domain fetch.
+exports.src_auth    = '(?:(?:(?!' + src_ZCc + '|[@/]).)+@)?';
 
 var src_port = exports.src_port =
 
@@ -58549,14 +58669,14 @@ var src_port = exports.src_port =
 
 var src_host_terminator = exports.src_host_terminator =
 
-  '(?=$|' + src_ZPCc + ')(?!-|_|:\\d|\\.-|\\.(?!$|' + src_ZPCc + '))';
+  '(?=$|>|<|' + src_ZPCc + ')(?!-|_|:\\d|\\.-|\\.(?!$|' + src_ZPCc + '))';
 
 var src_path = exports.src_path =
 
   '(?:' +
     '[/?#]' +
       '(?:' +
-        '(?!' + src_ZCc + '|[()[\\]{}.,"\'?!\\-]).|' +
+        '(?!' + src_ZCc + '|[()[\\]{}.,"\'?!\\-<>]).|' +
         '\\[(?:(?!' + src_ZCc + '|\\]).)*\\]|' +
         '\\((?:(?!' + src_ZCc + '|[)]).)*\\)|' +
         '\\{(?:(?!' + src_ZCc + '|[}]).)*\\}|' +
@@ -58590,11 +58710,11 @@ var src_xn = exports.src_xn =
 
 var src_domain_root = exports.src_domain_root =
 
-  // Can't have digits and dashes
+  // Allow letters & digits (http://test1)
   '(?:' +
     src_xn +
     '|' +
-    src_pseudo_letter_non_d + '{1,63}' +
+    src_pseudo_letter + '{1,63}' +
   ')';
 
 var src_domain = exports.src_domain =
@@ -58613,8 +58733,9 @@ var src_domain = exports.src_domain =
 var src_host = exports.src_host =
 
   '(?:' +
-    src_ip4 +
-  '|' +
+  // Don't need IP check, because digits are already allowed in normal domain names
+  //   src_ip4 +
+  // '|' +
     '(?:(?:(?:' + src_domain + ')\\.)*' + src_domain_root + ')' +
   ')';
 
@@ -58657,11 +58778,11 @@ var tpl_host_port_no_ip_fuzzy_strict = exports.tpl_host_port_no_ip_fuzzy_strict 
 // Rude test fuzzy links by host, for quick deny
 exports.tpl_host_fuzzy_test =
 
-  'localhost|\\.\\d{1,3}\\.|(?:\\.(?:%TLDS%)(?:' + src_ZPCc + '|$))';
+  'localhost|www\\.|\\.\\d{1,3}\\.|(?:\\.(?:%TLDS%)(?:' + src_ZPCc + '|>|$))';
 
 exports.tpl_email_fuzzy =
 
-    '(^|>|' + src_ZCc + ')(' + src_email_name + '@' + tpl_host_fuzzy_strict + ')';
+    '(^|<|>|\\(|' + src_ZCc + ')(' + src_email_name + '@' + tpl_host_fuzzy_strict + ')';
 
 exports.tpl_link_fuzzy =
     // Fuzzy link can't be prepended with .:/\- and non punctuation.
@@ -59254,9 +59375,9 @@ module.exports=/[\0-\x1F\x7F-\x9F]/
 },{}],327:[function(require,module,exports){
 module.exports=/[\xAD\u0600-\u0605\u061C\u06DD\u070F\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF\uFFF9-\uFFFB]|\uD804\uDCBD|\uD82F[\uDCA0-\uDCA3]|\uD834[\uDD73-\uDD7A]|\uDB40[\uDC01\uDC20-\uDC7F]/
 },{}],328:[function(require,module,exports){
-module.exports=/[!-#%-\*,-/:;\?@\[-\]_\{\}\xA1\xA7\xAB\xB6\xB7\xBB\xBF\u037E\u0387\u055A-\u055F\u0589\u058A\u05BE\u05C0\u05C3\u05C6\u05F3\u05F4\u0609\u060A\u060C\u060D\u061B\u061E\u061F\u066A-\u066D\u06D4\u0700-\u070D\u07F7-\u07F9\u0830-\u083E\u085E\u0964\u0965\u0970\u0AF0\u0DF4\u0E4F\u0E5A\u0E5B\u0F04-\u0F12\u0F14\u0F3A-\u0F3D\u0F85\u0FD0-\u0FD4\u0FD9\u0FDA\u104A-\u104F\u10FB\u1360-\u1368\u1400\u166D\u166E\u169B\u169C\u16EB-\u16ED\u1735\u1736\u17D4-\u17D6\u17D8-\u17DA\u1800-\u180A\u1944\u1945\u1A1E\u1A1F\u1AA0-\u1AA6\u1AA8-\u1AAD\u1B5A-\u1B60\u1BFC-\u1BFF\u1C3B-\u1C3F\u1C7E\u1C7F\u1CC0-\u1CC7\u1CD3\u2010-\u2027\u2030-\u2043\u2045-\u2051\u2053-\u205E\u207D\u207E\u208D\u208E\u2308-\u230B\u2329\u232A\u2768-\u2775\u27C5\u27C6\u27E6-\u27EF\u2983-\u2998\u29D8-\u29DB\u29FC\u29FD\u2CF9-\u2CFC\u2CFE\u2CFF\u2D70\u2E00-\u2E2E\u2E30-\u2E42\u3001-\u3003\u3008-\u3011\u3014-\u301F\u3030\u303D\u30A0\u30FB\uA4FE\uA4FF\uA60D-\uA60F\uA673\uA67E\uA6F2-\uA6F7\uA874-\uA877\uA8CE\uA8CF\uA8F8-\uA8FA\uA92E\uA92F\uA95F\uA9C1-\uA9CD\uA9DE\uA9DF\uAA5C-\uAA5F\uAADE\uAADF\uAAF0\uAAF1\uABEB\uFD3E\uFD3F\uFE10-\uFE19\uFE30-\uFE52\uFE54-\uFE61\uFE63\uFE68\uFE6A\uFE6B\uFF01-\uFF03\uFF05-\uFF0A\uFF0C-\uFF0F\uFF1A\uFF1B\uFF1F\uFF20\uFF3B-\uFF3D\uFF3F\uFF5B\uFF5D\uFF5F-\uFF65]|\uD800[\uDD00-\uDD02\uDF9F\uDFD0]|\uD801\uDD6F|\uD802[\uDC57\uDD1F\uDD3F\uDE50-\uDE58\uDE7F\uDEF0-\uDEF6\uDF39-\uDF3F\uDF99-\uDF9C]|\uD804[\uDC47-\uDC4D\uDCBB\uDCBC\uDCBE-\uDCC1\uDD40-\uDD43\uDD74\uDD75\uDDC5-\uDDC8\uDDCD\uDE38-\uDE3D]|\uD805[\uDCC6\uDDC1-\uDDC9\uDE41-\uDE43]|\uD809[\uDC70-\uDC74]|\uD81A[\uDE6E\uDE6F\uDEF5\uDF37-\uDF3B\uDF44]|\uD82F\uDC9F/
+module.exports=/[!-#%-\*,-/:;\?@\[-\]_\{\}\xA1\xA7\xAB\xB6\xB7\xBB\xBF\u037E\u0387\u055A-\u055F\u0589\u058A\u05BE\u05C0\u05C3\u05C6\u05F3\u05F4\u0609\u060A\u060C\u060D\u061B\u061E\u061F\u066A-\u066D\u06D4\u0700-\u070D\u07F7-\u07F9\u0830-\u083E\u085E\u0964\u0965\u0970\u0AF0\u0DF4\u0E4F\u0E5A\u0E5B\u0F04-\u0F12\u0F14\u0F3A-\u0F3D\u0F85\u0FD0-\u0FD4\u0FD9\u0FDA\u104A-\u104F\u10FB\u1360-\u1368\u1400\u166D\u166E\u169B\u169C\u16EB-\u16ED\u1735\u1736\u17D4-\u17D6\u17D8-\u17DA\u1800-\u180A\u1944\u1945\u1A1E\u1A1F\u1AA0-\u1AA6\u1AA8-\u1AAD\u1B5A-\u1B60\u1BFC-\u1BFF\u1C3B-\u1C3F\u1C7E\u1C7F\u1CC0-\u1CC7\u1CD3\u2010-\u2027\u2030-\u2043\u2045-\u2051\u2053-\u205E\u207D\u207E\u208D\u208E\u2308-\u230B\u2329\u232A\u2768-\u2775\u27C5\u27C6\u27E6-\u27EF\u2983-\u2998\u29D8-\u29DB\u29FC\u29FD\u2CF9-\u2CFC\u2CFE\u2CFF\u2D70\u2E00-\u2E2E\u2E30-\u2E42\u3001-\u3003\u3008-\u3011\u3014-\u301F\u3030\u303D\u30A0\u30FB\uA4FE\uA4FF\uA60D-\uA60F\uA673\uA67E\uA6F2-\uA6F7\uA874-\uA877\uA8CE\uA8CF\uA8F8-\uA8FA\uA8FC\uA92E\uA92F\uA95F\uA9C1-\uA9CD\uA9DE\uA9DF\uAA5C-\uAA5F\uAADE\uAADF\uAAF0\uAAF1\uABEB\uFD3E\uFD3F\uFE10-\uFE19\uFE30-\uFE52\uFE54-\uFE61\uFE63\uFE68\uFE6A\uFE6B\uFF01-\uFF03\uFF05-\uFF0A\uFF0C-\uFF0F\uFF1A\uFF1B\uFF1F\uFF20\uFF3B-\uFF3D\uFF3F\uFF5B\uFF5D\uFF5F-\uFF65]|\uD800[\uDD00-\uDD02\uDF9F\uDFD0]|\uD801\uDD6F|\uD802[\uDC57\uDD1F\uDD3F\uDE50-\uDE58\uDE7F\uDEF0-\uDEF6\uDF39-\uDF3F\uDF99-\uDF9C]|\uD804[\uDC47-\uDC4D\uDCBB\uDCBC\uDCBE-\uDCC1\uDD40-\uDD43\uDD74\uDD75\uDDC5-\uDDC9\uDDCD\uDDDB\uDDDD-\uDDDF\uDE38-\uDE3D\uDEA9]|\uD805[\uDCC6\uDDC1-\uDDD7\uDE41-\uDE43\uDF3C-\uDF3E]|\uD809[\uDC70-\uDC74]|\uD81A[\uDE6E\uDE6F\uDEF5\uDF37-\uDF3B\uDF44]|\uD82F\uDC9F|\uD836[\uDE87-\uDE8B]/
 },{}],329:[function(require,module,exports){
-module.exports=/[ \xA0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/
+module.exports=/[ \xA0\u1680\u2000-\u200A\u202F\u205F\u3000]/
 },{}],330:[function(require,module,exports){
 
 module.exports.Any = require('./properties/Any/regex');
@@ -59266,7 +59387,7 @@ module.exports.P   = require('./categories/P/regex');
 module.exports.Z   = require('./categories/Z/regex');
 
 },{"./categories/Cc/regex":326,"./categories/Cf/regex":327,"./categories/P/regex":328,"./categories/Z/regex":329,"./properties/Any/regex":331}],331:[function(require,module,exports){
-module.exports=/[\0-\uD7FF\uDC00-\uFFFF]|[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDBFF]/
+module.exports=/[\0-\uD7FF\uE000-\uFFFF]|[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF]/
 },{}],332:[function(require,module,exports){
 //     Underscore.js 1.8.3
 //     http://underscorejs.org
@@ -61354,33 +61475,31 @@ function enableSideBySide(editor) {
     hidePreview(editor);
   }
 
-  _.defer(function() {
+  // When the preview button is clicked for the first time,
+  // give some time for the transition from editor.css to fire and the view to slide from right to left,
+  // instead of just appearing.
+  setTimeout(function() {
+    preview.className += " editor-preview-active-side";
+  }, 1);
+  toolbarButton.className += " active";
+  wrapper.className += " CodeMirror-sided";
 
-    // When the preview button is clicked for the first time,
-    // give some time for the transition from editor.css to fire and the view to slide from right to left,
-    // instead of just appearing.
-    setTimeout(function() {
-      preview.className += " editor-preview-active-side";
-    }, 1);
-    toolbarButton.className += " active";
-    wrapper.className += " CodeMirror-sided";
+  // Start preview with the current text
+  //preview.innerHTML = editor.options.previewRender(editor.value(), preview);
+  editor.updatePreview();
 
-    // Start preview with the current text
+  // Updates preview
+  editor._updatePreview = _.throttle(function() {
     //preview.innerHTML = editor.options.previewRender(editor.value(), preview);
     editor.updatePreview();
-
-    // Updates preview
-    editor._updatePreview = _.throttle(function() {
-      //preview.innerHTML = editor.options.previewRender(editor.value(), preview);
-      editor.updatePreview();
-    }, 1000);
-    cm.on("update", editor._updatePreview);
-    _.defer(function() {
-      cm.refresh();
-      cm = null;
-    });
-
+  }, 1000);
+  cm.on("update", editor._updatePreview);
+  _.defer(function() {
+    cm.refresh();
+    cm = null;
   });
+
+  editor.emitter.emit("did-sidebyside-toggle", { editor: editor, visible: true });
 }
 
 function disableSideBySide(editor) {
@@ -61399,6 +61518,8 @@ function disableSideBySide(editor) {
   cm.off("update", editor._updatePreview);
   cm.refresh();
   editor._updatePreview = undefined;
+
+  editor.emitter.emit("did-sidebyside-toggle", { editor: editor, visible: false });
 }
 
 
@@ -61428,6 +61549,14 @@ function showPreview(editor) {
   var toolbar = editor.toolbarElements.preview;
   var preview = wrapper.nextSibling;
 
+  if (isPreviewShown(editor)) {
+    return;
+  }
+
+  // calc scroll position of editor
+  var height = cm.getScrollInfo().height - cm.getScrollInfo().clientHeight;
+  var ratio = parseFloat(cm.getScrollInfo().top) / height;
+
   if (isSideBySideEnabled(editor)) {
     disableSideBySide(editor);
   }
@@ -61438,6 +61567,8 @@ function showPreview(editor) {
   // instead of just appearing.
   setTimeout(function() {
     preview.className += " editor-preview-active";
+    var move = (preview.scrollHeight - preview.clientHeight) * ratio;
+    preview.scrollTop = Math.max(0, move);
   }, 1);
   toolbar.className += " active";
   toolbar_div.className += " disabled-for-preview";
@@ -61450,6 +61581,7 @@ function showPreview(editor) {
     toggleSideBySide(editor);
   }
   //});
+  editor.emitter.emit("did-preview-toggle", { editor: editor, visible: true });
 }
 
 function hidePreview(editor) {
@@ -61458,6 +61590,14 @@ function hidePreview(editor) {
   var toolbar_div = editor.container.previousSibling;
   var toolbar = editor.toolbarElements.preview;
   var preview = wrapper.nextSibling;
+
+  if (!isPreviewShown(editor)) {
+    return;
+  }
+
+  // calc scroll position of preview
+  var height = preview.scrollHeight - preview.clientHeight;
+  var ratio = parseFloat(preview.scrollTop) / height;
 
   preview.className = preview.className.replace(
     /\s*editor-preview-active\s*/g, ""
@@ -61469,6 +61609,15 @@ function hidePreview(editor) {
   toolbar_div.className = toolbar_div.className.replace(/\s*disabled-for-preview*/g, "");
 
   cm.refresh();
+  cm.focus();
+  _.defer(function () {
+    cm.refresh();
+  });
+
+  var move = (cm.getScrollInfo().height - cm.getScrollInfo().clientHeight) * ratio;
+  cm.scrollTo(0, Math.max(0, move));
+
+  editor.emitter.emit("did-preview-toggle", { editor: editor, visible: false });
 }
 
 
@@ -61840,19 +61989,19 @@ var toolbarBuiltInButtons = {
   "preview": {
     name: "preview",
     action: togglePreview,
-    className: "fa fa-eye no-disable",
-    title: "Toggle Preview (Ctrl+P)"
+    className: "toolbar-item-preview fa fa-eye no-disable",
+    title: "Toggle Preview (Ctrl+E)"
   },
   "side-by-side": {
     name: "side-by-side",
     action: toggleSideBySide,
-    className: "fa fa-columns no-disable no-mobile",
-    title: "Toggle Side by Side (Ctrl+Shift+P)"
+    className: "toolbar-item-side-by-side fa fa-columns no-disable no-mobile",
+    title: "Toggle Side by Side (Ctrl+P)"
   },
   "fullscreen": {
     name: "fullscreen",
     action: toggleFullScreen,
-    className: "fa fa-arrows-alt no-disable no-mobile",
+    className: "toolbar-item-fullscreen fa fa-arrows-alt no-disable no-mobile",
     title: "Toggle Fullscreen (F11)"
   },
   "guide": {
@@ -62075,7 +62224,7 @@ SimpleMDE.prototype.render = function(el) {
   });
 
   var container = document.createElement("div");
-  container.className = "editor-container";
+  container.className = "mde-editor-container";
   container.appendChild(this.codemirror.getWrapperElement());
   el.parentNode.insertBefore(container, el.nextSibling);
   this.container = container;
@@ -62272,7 +62421,7 @@ SimpleMDE.prototype.createStatusbar = function(status) {
   if (!status || status.length === 0) return;
 
   var bar = document.createElement("div");
-  bar.className = "editor-statusbar";
+  bar.className = "mde-editor-statusbar";
 
   var pos, cm = this.codemirror;
   for (var i = 0; i < status.length; i++) {
@@ -62418,6 +62567,13 @@ SimpleMDE.prototype.hidePreview = function() {
 SimpleMDE.prototype.toggleSideBySide = function() {
   toggleSideBySide(this);
 };
+SimpleMDE.prototype.enableSideBySide = function() {
+  enableSideBySide(this);
+};
+SimpleMDE.prototype.disableSideBySide = function() {
+  disableSideBySide(this);
+};
+
 SimpleMDE.prototype.toggleFullScreen = function() {
   toggleFullScreen(this);
 };
@@ -62461,6 +62617,14 @@ SimpleMDE.prototype.getPreview = function() {
 
 SimpleMDE.prototype.onDidUpdatePreview = function(callback) {
   return this.emitter.on("did-update-preview", callback);
+};
+
+SimpleMDE.prototype.onDidPreviewToggle = function(callback) {
+  return this.emitter.on("did-preview-toggle", callback);
+};
+
+SimpleMDE.prototype.onDidSideBySideToggle = function(callback) {
+  return this.emitter.on("did-sidebyside-toggle", callback);
 };
 
 module.exports = SimpleMDE;

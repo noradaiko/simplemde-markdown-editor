@@ -1120,7 +1120,7 @@ SimpleMDE.prototype.render = function(el) {
   });
 
   var container = document.createElement("div");
-  container.className = "editor-container";
+  container.className = "mde-editor-container";
   container.appendChild(this.codemirror.getWrapperElement());
   el.parentNode.insertBefore(container, el.nextSibling);
   this.container = container;
@@ -1317,7 +1317,7 @@ SimpleMDE.prototype.createStatusbar = function(status) {
   if (!status || status.length === 0) return;
 
   var bar = document.createElement("div");
-  bar.className = "editor-statusbar";
+  bar.className = "mde-editor-statusbar";
 
   var pos, cm = this.codemirror;
   for (var i = 0; i < status.length; i++) {
