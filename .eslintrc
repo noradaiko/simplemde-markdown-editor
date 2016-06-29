@@ -19,5 +19,8 @@
     "browser": true,
     "node":true
   },
+  "globals": {
+    "debug": true
+  },
   "extends": "eslint:recommended"
 }

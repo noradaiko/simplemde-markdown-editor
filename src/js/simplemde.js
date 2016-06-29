@@ -342,6 +342,17 @@ function redo(editor) {
 
 
 /**
+ * Scroll to top action
+ */
+function scrollToTop(editor) {
+  var cm = editor.codemirror;
+  var wrapper = cm.getWrapperElement();
+  var preview = wrapper.nextSibling;
+  cm.scrollTo(0, 0);
+  preview.scrollTop = 0;
+}
+
+/**
  * Toggle side by side preview
  */
 function toggleSideBySide(editor) {
@@ -431,6 +442,7 @@ function disableSideBySide(editor) {
  * Preview action.
  */
 function togglePreview(editor) {
+  debug("toggling preview..");
   if (isPreviewShown(editor)) {
     hidePreview(editor);
   } else {
@@ -512,7 +524,14 @@ function hidePreview(editor) {
   toolbar.className = toolbar.className.replace(/\s*active\s*/g, "");
   toolbar_div.className = toolbar_div.className.replace(/\s*disabled-for-preview*/g, "");
 
-  cm.refresh();
+  console.log("refresh codemirror!");
+  if (cm.getValue() === "") {
+    var lineWrapping = cm.getOption("lineWrapping");
+    cm.setOption("lineWrapping", !lineWrapping);
+    cm.setOption("lineWrapping", lineWrapping);
+  }
+  
+  // cm.refresh();
   cm.focus();
   _.defer(function () {
     cm.refresh();
@@ -521,7 +540,9 @@ function hidePreview(editor) {
   var move = (cm.getScrollInfo().height - cm.getScrollInfo().clientHeight) * ratio;
   cm.scrollTo(0, Math.max(0, move));
 
+  debug("emitting event 'did-preview-toggle'");
   editor.emitter.emit("did-preview-toggle", { editor: editor, visible: false });
+  debug("done!!!!!!!!!!!!");
 }
 
 
@@ -1518,6 +1539,10 @@ SimpleMDE.prototype.getPreview = function() {
   var cm = this.codemirror;
   var wrapper = cm.getWrapperElement();
   return wrapper.nextSibling;
+};
+
+SimpleMDE.prototype.scrollToTop = function () {
+  return scrollToTop(this);
 };
 
 SimpleMDE.prototype.onDidUpdatePreview = function(callback) {
