@@ -524,7 +524,7 @@ function hidePreview(editor) {
   toolbar.className = toolbar.className.replace(/\s*active\s*/g, "");
   toolbar_div.className = toolbar_div.className.replace(/\s*disabled-for-preview*/g, "");
 
-  console.log("refresh codemirror!");
+  debug("refresh codemirror!");
   if (cm.getValue() === "") {
     var lineWrapping = cm.getOption("lineWrapping");
     cm.setOption("lineWrapping", !lineWrapping);
